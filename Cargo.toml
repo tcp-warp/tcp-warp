@@ -1,0 +1,9 @@
+[workspace]
+
+members = [
+"tcp-warp",
+"tcp-warp-cli"
+]
+
+[profile.release]
+lto = true
