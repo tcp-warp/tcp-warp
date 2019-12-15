@@ -19,16 +19,30 @@ impl TcpWarpClient {
         let stream = TcpStream::connect(&self.server_address).await?;
         let (mut wtransport, mut rtransport) = Framed::new(stream, TcpWarpProto).split();
 
-        let (sender, mut receiver) = unbounded_channel();
+        let (sender, mut receiver) = channel(100);
 
-        let receiver_task = async move {
+        let forward_task = async move {
             debug!("in receiver task");
+
+            let mut connections = HashMap::new();
+
             while let Some(message) = receiver.next().await {
                 debug!("just received a message: {:?}", message);
+                match &message {
+                    TcpWarpMessage::Connect {
+                        connection_id,
+                        client_sender,
+                        host_port: _,
+                    } => {
+                        debug!("adding connection: {}", connection_id);
+                        connections.insert(connection_id.clone(), client_sender.clone());
+                    }
+                    _ => (),
+                }
                 wtransport.send(message).await?;
             }
 
-            debug!("no more messages, closing receiver task");
+            debug!("no more messages, closing forward task");
 
             Ok::<(), io::Error>(())
         };
@@ -45,7 +59,7 @@ impl TcpWarpClient {
             Ok::<(), io::Error>(())
         };
 
-        let (_, _) = try_join!(receiver_task, processing_task)?;
+        let (_, _) = try_join!(forward_task, processing_task)?;
 
         Ok(())
     }
@@ -53,7 +67,7 @@ impl TcpWarpClient {
 
 async fn process_host_to_client_message(
     message: TcpWarpMessage,
-    sender: UnboundedSender<TcpWarpMessage>,
+    sender: Sender<TcpWarpMessage>,
     mapping: &[TcpWarpPortMap],
     bind_address: IpAddr,
 ) -> Result<(), io::Error> {
@@ -64,13 +78,17 @@ async fn process_host_to_client_message(
 
                 let bind_address = SocketAddr::new(bind_address, port);
                 let sender_ = sender.clone();
+
                 spawn(async move {
                     let mut listener = TcpListener::bind(bind_address).await?;
+
                     info!("listen: {:?}", bind_address);
+
                     let mut incoming = listener.incoming();
 
                     while let Some(Ok(stream)) = incoming.next().await {
                         let sender__ = sender_.clone();
+
                         spawn(async move {
                             if let Err(e) = process(stream, sender__, host_port, port).await {
                                 info!("failed to process connection; error = {}", e);
@@ -105,10 +123,59 @@ fn host_port(mapping: &[TcpWarpPortMap], client_port: u16) -> Option<u16> {
 
 async fn process(
     stream: TcpStream,
-    sender: UnboundedSender<TcpWarpMessage>,
+    mut host_sender: Sender<TcpWarpMessage>,
     host_port: u16,
     client_port: u16,
 ) -> Result<(), Box<dyn Error>> {
-    sender.send(TcpWarpMessage::CloseConnection)?;
+    let connection_id = Uuid::new_v4();
+
+    let (mut wtransport, mut rtransport) = Framed::new(
+        stream,
+        TcpWarpProtoClient {
+            connection_id,
+            host_port,
+            client_port,
+        },
+    )
+    .split();
+
+    let (client_sender, mut client_receiver) = channel(100);
+
+    let forward_task = async move {
+        debug!("in receiver task");
+        while let Some(message) = client_receiver.next().await {
+            debug!("just received a message: {:?}", message);
+            wtransport.send(message).await?;
+        }
+
+        debug!("no more messages, closing forward task");
+
+        Ok::<(), io::Error>(())
+    };
+
+    host_sender
+        .send(TcpWarpMessage::Connect {
+            connection_id,
+            host_port,
+            client_sender,
+        })
+        .await?;
+
+    let mut host_sender_ = host_sender.clone();
+    let processing_task = async move {
+        while let Some(Ok(message)) = rtransport.next().await {
+            if let Err(err) = host_sender_.send(message).await {
+                error!("{}", err);
+            }
+        }
+        Ok::<(), io::Error>(())
+    };
+
+    try_join!(forward_task, processing_task)?;
+
+    host_sender
+        .send(TcpWarpMessage::Disconnect { connection_id })
+        .await?;
+
     Ok(())
 }

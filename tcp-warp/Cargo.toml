@@ -3,20 +3,21 @@ name = 'tcp-warp'
 version = '0.1.0'
 authors = ['Alexander Korolev <kilork@yandex.ru>']
 edition = '2018'
-description = """
+description = '''
 tcp-warp description.
-"""
-homepage = "https://github.com/kilork/tcp-warp"
+'''
+homepage = 'https://github.com/kilork/tcp-warp'
 keywords = []
-license = "Unlicense OR MIT"
-readme = "README.md"
-repository = "https://github.com/kilork/tcp-warp"
+license = 'Unlicense OR MIT'
+readme = 'README.md'
+repository = 'https://github.com/kilork/tcp-warp'
 
 [dependencies]
 bytes = '0.5'
 failure = '0.1'
 futures = '0.3'
 log = '0.4'
+uuid = {version='0.8', features = ['v4']}
 
 [dependencies.tokio]
 version = '0.2'

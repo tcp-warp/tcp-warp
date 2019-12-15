@@ -3,6 +3,7 @@ use failure::Fail;
 use futures::{prelude::*, stream::SplitSink, try_join};
 use log::*;
 use std::{
+    collections::HashMap,
     convert::TryInto,
     error::Error,
     net::{IpAddr, SocketAddr},
@@ -13,16 +14,17 @@ use tokio::{
     net::{TcpListener, TcpStream},
     prelude::*,
     spawn,
-    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+    sync::mpsc::{channel, Receiver, Sender},
 };
 use tokio_util::codec::{Decoder, Encoder, Framed};
+use uuid::Uuid;
 
 mod client;
 mod proto;
 mod server;
 
 pub use client::TcpWarpClient;
-pub use proto::{TcpWarpMessage, TcpWarpProto};
+pub use proto::{TcpWarpMessage, TcpWarpProto, TcpWarpProtoClient};
 pub use server::TcpWarpServer;
 
 #[derive(Debug, Clone)]
