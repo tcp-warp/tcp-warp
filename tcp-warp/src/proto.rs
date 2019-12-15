@@ -52,6 +52,7 @@ impl Decoder for TcpWarpProto {
 
 /// Command types:
 /// 1 - add ports
+#[derive(Debug)]
 pub enum TcpWarpMessage {
     AddPorts(Vec<u16>),
     BytesClient { port: u16, client: u16, data: Bytes },

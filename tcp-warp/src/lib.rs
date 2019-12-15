@@ -1,17 +1,19 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use failure::Fail;
-use futures::prelude::*;
+use futures::{prelude::*, stream::SplitSink, try_join};
 use log::*;
 use std::{
     convert::TryInto,
     error::Error,
     net::{IpAddr, SocketAddr},
     str::FromStr,
+    sync::{Arc, Mutex},
 };
 use tokio::{
     net::{TcpListener, TcpStream},
     prelude::*,
     spawn,
+    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
 };
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
@@ -23,7 +25,7 @@ pub use client::TcpWarpClient;
 pub use proto::{TcpWarpMessage, TcpWarpProto};
 pub use server::TcpWarpServer;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TcpWarpPortMap {
     host_port: u16,
     client_port: u16,
