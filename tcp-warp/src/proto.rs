@@ -17,6 +17,15 @@ impl Encoder for TcpWarpProto {
                     dst.put_u16(port);
                 }
             }
+            TcpWarpMessage::HostConnect {
+                connection_id,
+                host_port,
+            } => {
+                dst.reserve(1 + 16 + 2);
+                dst.put_u8(2);
+                dst.put_u128(connection_id.as_u128());
+                dst.put_u16(host_port);
+            }
             _ => {
                 error!("unknown message");
             }
@@ -45,6 +54,15 @@ impl Decoder for TcpWarpProto {
                     None
                 }
             }
+            Some(2) if src.len() > (16 + 2) => {
+                src.advance(1);
+                let connection_id = Uuid::from_slice(&src[0..16]).unwrap();
+                let host_port = u16::from_be_bytes(src[16..18].try_into().unwrap());
+                Some(TcpWarpMessage::HostConnect {
+                    connection_id,
+                    host_port,
+                })
+            }
             _ => None,
         })
     }
@@ -52,13 +70,12 @@ impl Decoder for TcpWarpProto {
 
 /// Command types:
 /// 1 - add ports
+/// 2 - host connect u128 u16
 #[derive(Debug)]
 pub enum TcpWarpMessage {
     AddPorts(Vec<u16>),
     BytesClient {
         connection_id: Uuid,
-        host_port: u16,
-        client_port: u16,
         data: BytesMut,
     },
     BytesServer {
@@ -67,7 +84,11 @@ pub enum TcpWarpMessage {
     Connect {
         connection_id: Uuid,
         host_port: u16,
-        client_sender: Sender<TcpWarpMessage>,
+        sender: Sender<TcpWarpMessage>,
+    },
+    HostConnect {
+        connection_id: Uuid,
+        host_port: u16,
     },
     Disconnect {
         connection_id: Uuid,
@@ -76,8 +97,6 @@ pub enum TcpWarpMessage {
 
 pub struct TcpWarpProtoClient {
     pub connection_id: Uuid,
-    pub host_port: u16,
-    pub client_port: u16,
 }
 
 impl Encoder for TcpWarpProtoClient {
@@ -102,11 +121,52 @@ impl Decoder for TcpWarpProtoClient {
     type Error = io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> io::Result<Option<TcpWarpMessage>> {
+        if src.is_empty() {
+            return Ok(None);
+        }
+
         Ok(Some(TcpWarpMessage::BytesClient {
             connection_id: self.connection_id,
-            host_port: self.host_port,
-            client_port: self.client_port,
             data: src.split(),
         }))
     }
 }
+/*
+pub struct TcpWarpProtoHost {
+    pub connection_id: Uuid,
+}
+
+impl Encoder for TcpWarpProtoHost {
+    type Item = TcpWarpMessage;
+    type Error = io::Error;
+
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> io::Result<()> {
+        match item {
+            TcpWarpMessage::BytesServer { data } => {
+                dst.extend_from_slice(&data);
+            }
+            _ => {
+                error!("unsupported message");
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Decoder for TcpWarpProtoHost {
+    type Item = TcpWarpMessage;
+    type Error = io::Error;
+
+    fn decode(&mut self, src: &mut BytesMut) -> io::Result<Option<TcpWarpMessage>> {
+        if src.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(TcpWarpMessage::BytesClient {
+            connection_id: self.connection_id,
+            data: src.split(),
+        }))
+    }
+}
+
+*/

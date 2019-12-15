@@ -28,17 +28,25 @@ impl TcpWarpClient {
 
             while let Some(message) = receiver.next().await {
                 debug!("just received a message: {:?}", message);
-                match &message {
+                let message = match message {
                     TcpWarpMessage::Connect {
                         connection_id,
-                        client_sender,
-                        host_port: _,
+                        sender,
+                        host_port,
                     } => {
                         debug!("adding connection: {}", connection_id);
-                        connections.insert(connection_id.clone(), client_sender.clone());
+                        connections.insert(connection_id.clone(), sender.clone());
+                        TcpWarpMessage::HostConnect {
+                            connection_id,
+                            host_port,
+                        }
                     }
-                    _ => (),
-                }
+                    TcpWarpMessage::Disconnect { ref connection_id } => {
+                        connections.remove(connection_id);
+                        break;
+                    }
+                    regular_message => regular_message,
+                };
                 wtransport.send(message).await?;
             }
 
@@ -129,15 +137,10 @@ async fn process(
 ) -> Result<(), Box<dyn Error>> {
     let connection_id = Uuid::new_v4();
 
-    let (mut wtransport, mut rtransport) = Framed::new(
-        stream,
-        TcpWarpProtoClient {
-            connection_id,
-            host_port,
-            client_port,
-        },
-    )
-    .split();
+    debug!("new connection: {}", connection_id);
+
+    let (mut wtransport, mut rtransport) =
+        Framed::new(stream, TcpWarpProtoClient { connection_id }).split();
 
     let (client_sender, mut client_receiver) = channel(100);
 
@@ -157,7 +160,7 @@ async fn process(
         .send(TcpWarpMessage::Connect {
             connection_id,
             host_port,
-            client_sender,
+            sender: client_sender,
         })
         .await?;
 

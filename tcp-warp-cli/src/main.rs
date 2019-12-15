@@ -22,6 +22,7 @@ use cli::{Cli, Command::*};
 const DEFAULT_CLIENT_BIND: &str = "0.0.0.0";
 const DEFAULT_CLIENT_SERVER: &str = "127.0.0.1:18000";
 const DEFAULT_SERVER_LISTEN: &str = DEFAULT_CLIENT_SERVER;
+const DEFAULT_SERVER_CONNECT: &str = "127.0.0.1";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -49,10 +50,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .connect()
             .await
         }
-        Server { listen } => {
+        Server { listen, connect } => {
             TcpWarpServer::new(
                 listen
                     .unwrap_or_else(|| DEFAULT_SERVER_LISTEN.into())
+                    .parse()?,
+                connect
+                    .unwrap_or_else(|| DEFAULT_SERVER_CONNECT.into())
                     .parse()?,
             )
             .listen()
