@@ -63,7 +63,9 @@ async fn process(
                         error!("connected sender errored: {:?}", err);
                     }
                     connections.insert(connection_id.clone(), sender.clone());
-                    wtransport.send(TcpWarpMessage::Connected { connection_id }).await?;
+                    wtransport
+                        .send(TcpWarpMessage::Connected { connection_id })
+                        .await?;
                     continue;
                 }
                 TcpWarpMessage::Disconnect { ref connection_id } => {

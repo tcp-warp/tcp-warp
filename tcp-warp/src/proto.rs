@@ -46,8 +46,13 @@ impl Encoder for TcpWarpProto {
                 dst.put_u32(data.len() as u32);
                 dst.put_slice(&data);
             }
-            _ => {
-                error!("unknown message");
+            TcpWarpMessage::Connected { connection_id } => {
+                dst.reserve(1 + 16);
+                dst.put_u8(5);
+                dst.put_u128(connection_id.as_u128());
+            }
+            other => {
+                error!("unknown message: {:?}", other);
             }
         }
 
@@ -114,6 +119,12 @@ impl Decoder for TcpWarpProto {
                 } else {
                     None
                 }
+            }
+            Some(5) if src.len() > (16) => {
+                src.advance(1);
+                let header = src.split_to(16);
+                let connection_id = Uuid::from_slice(&header).unwrap();
+                Some(TcpWarpMessage::Connected { connection_id })
             }
             _ => {
                 debug!("looks like data is wrong {:?}", src);

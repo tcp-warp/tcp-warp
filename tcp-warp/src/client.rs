@@ -40,7 +40,7 @@ impl TcpWarpClient {
                             connection_id.clone(),
                             TcpWarpConnection {
                                 sender,
-                                connected_sender,
+                                connected_sender: Some(connected_sender),
                             },
                         );
                         TcpWarpMessage::HostConnect {
@@ -51,6 +51,19 @@ impl TcpWarpClient {
                     TcpWarpMessage::Disconnect { ref connection_id } => {
                         connections.remove(connection_id);
                         break;
+                    }
+                    TcpWarpMessage::Connected { ref connection_id } => {
+                        if let Some(connection) = connections.get_mut(&connection_id) {
+                            debug!("start connected loop: {}", connection_id);
+                            if let Some(connection_sender) = connection.connected_sender.take() {
+                                if let Err(err) = connection_sender.send(Ok(())) {
+                                    error!("cannot send to oneshot channel: {:?}", err);
+                                }
+                            }
+                        } else {
+                            error!("connection not found: {}", connection_id);
+                        }
+                        continue;
                     }
                     TcpWarpMessage::BytesHost {
                         connection_id,
@@ -67,7 +80,7 @@ impl TcpWarpClient {
                                 .await
                             {
                                 error!("cannot send to channel: {}", err);
-                            };
+                            }
                         } else {
                             error!("connection not found: {}", connection_id);
                         }
@@ -140,7 +153,12 @@ async fn process_host_to_client_message(
         }
         TcpWarpMessage::BytesHost { .. } => {
             if let Err(err) = sender.send(message).await {
-                error!("cannot send message to forward channel: {}", err);
+                error!("cannot send message BytesHost to forward channel: {}", err);
+            }
+        }
+        TcpWarpMessage::Connected { .. } => {
+            if let Err(err) = sender.send(message).await {
+                error!("cannot send message Connected to forward channel: {}", err);
             }
         }
         other_message => warn!("unsupported message: {:?}", other_message),
