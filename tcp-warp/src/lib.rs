@@ -24,7 +24,7 @@ mod proto;
 mod server;
 
 pub use client::TcpWarpClient;
-pub use proto::{TcpWarpMessage, TcpWarpProto, TcpWarpProtoClient};
+pub use proto::{TcpWarpMessage, TcpWarpProto, TcpWarpProtoClient, TcpWarpProtoHost};
 pub use server::TcpWarpServer;
 
 #[derive(Debug, Clone)]

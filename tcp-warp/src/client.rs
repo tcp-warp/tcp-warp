@@ -27,7 +27,7 @@ impl TcpWarpClient {
             let mut connections = HashMap::new();
 
             while let Some(message) = receiver.next().await {
-                debug!("just received a message: {:?}", message);
+                debug!("just received a message connect: {:?}", message);
                 let message = match message {
                     TcpWarpMessage::Connect {
                         connection_id,
@@ -44,6 +44,23 @@ impl TcpWarpClient {
                     TcpWarpMessage::Disconnect { ref connection_id } => {
                         connections.remove(connection_id);
                         break;
+                    }
+                    TcpWarpMessage::BytesHost {
+                        connection_id,
+                        data,
+                    } => {
+                        if let Some(sender) = connections.get_mut(&connection_id) {
+                            debug!(
+                                "forward message to host port of connection: {}",
+                                connection_id
+                            );
+                            if let Err(err) =
+                                sender.send(TcpWarpMessage::BytesServer { data }).await
+                            {
+                                error!("cannot send to channel: {}", err);
+                            };
+                        }
+                        continue;
                     }
                     regular_message => regular_message,
                 };
@@ -75,7 +92,7 @@ impl TcpWarpClient {
 
 async fn process_host_to_client_message(
     message: TcpWarpMessage,
-    sender: Sender<TcpWarpMessage>,
+    mut sender: Sender<TcpWarpMessage>,
     mapping: &[TcpWarpPortMap],
     bind_address: IpAddr,
 ) -> Result<(), io::Error> {
@@ -108,6 +125,11 @@ async fn process_host_to_client_message(
 
                     Ok::<(), io::Error>(())
                 });
+            }
+        }
+        TcpWarpMessage::BytesHost { .. } => {
+            if let Err(err) = sender.send(message).await {
+                error!("cannot send message to forward channel: {}", err);
             }
         }
         other_message => warn!("unsupported message: {:?}", other_message),
@@ -147,7 +169,7 @@ async fn process(
     let forward_task = async move {
         debug!("in receiver task");
         while let Some(message) = client_receiver.next().await {
-            debug!("just received a message: {:?}", message);
+            debug!("just received a message process: {:?}", message);
             wtransport.send(message).await?;
         }
 

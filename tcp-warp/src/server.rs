@@ -45,6 +45,7 @@ async fn process(stream: TcpStream, connect_address: IpAddr) -> Result<(), Box<d
     let forward_task = async move {
         debug!("in receiver task process");
         while let Some(message) = receiver.next().await {
+            debug!("received in fw message: {:?}", message);
             match message {
                 TcpWarpMessage::Connect {
                     connection_id,
@@ -59,9 +60,16 @@ async fn process(stream: TcpStream, connect_address: IpAddr) -> Result<(), Box<d
                     connections.remove(connection_id);
                     break;
                 }
-                _ => (),
+                TcpWarpMessage::BytesClient { connection_id, data } => {
+                    if let Some(sender) = connections.get_mut(&connection_id) {
+                        debug!("forward message to host port of connection: {}", connection_id);
+                        if let Err(err) = sender.send(TcpWarpMessage::BytesServer { data }).await {
+                            error!("cannot send to channel: {}", err);
+                        };
+                    }
+                }
+                _ => wtransport.send(message).await?,
             }
-            wtransport.send(message).await?;
         }
         Ok::<(), io::Error>(())
     };
@@ -69,23 +77,26 @@ async fn process(stream: TcpStream, connect_address: IpAddr) -> Result<(), Box<d
     let processing_task = async move {
         while let Some(Ok(message)) = rtransport.next().await {
             debug!("received {:?}", message);
-            spawn(process_client_to_host_message(
-                message,
-                sender.clone(),
-                connect_address,
-            ));
+            let sender_ = sender.clone();
+            spawn(async move {
+                if let Err(err) =
+                    process_client_to_host_message(message, sender_, connect_address).await
+                {
+                    error!("error in processing: {}", err);
+                }
+            });
         }
 
         Ok::<(), io::Error>(())
     };
     let (_, _) = try_join!(forward_task, processing_task)?;
-
+    debug!("finished process");
     Ok(())
 }
 
 async fn process_client_to_host_message(
     message: TcpWarpMessage,
-    client_sender: Sender<TcpWarpMessage>,
+    mut client_sender: Sender<TcpWarpMessage>,
     connect_address: IpAddr,
 ) -> Result<(), io::Error> {
     match message {
@@ -111,6 +122,11 @@ async fn process_client_to_host_message(
                 }
             });
         }
+        TcpWarpMessage::BytesClient { .. } => {
+            if let Err(err) = client_sender.send(message).await {
+                error!("cannot send message to forward channel: {}", err);
+            }
+        },
         other_message => warn!("unsupported message: {:?}", other_message),
     }
     Ok(())
@@ -126,7 +142,7 @@ async fn process_host_connection(
     let stream = TcpStream::connect(connect_address).await?;
 
     let (mut wtransport, mut rtransport) =
-        Framed::new(stream, TcpWarpProtoClient { connection_id }).split();
+        Framed::new(stream, TcpWarpProtoHost { connection_id }).split();
 
     let (host_sender, mut host_receiver) = channel(100);
 
@@ -150,7 +166,7 @@ async fn process_host_connection(
             sender: host_sender,
         })
         .await?;
-
+    debug!("sended connect to client");
     let mut client_sender_ = client_sender.clone();
     let processing_task = async move {
         while let Some(Ok(message)) = rtransport.next().await {
@@ -162,6 +178,7 @@ async fn process_host_connection(
     };
 
     try_join!(forward_task, processing_task)?;
+    debug!("disconnect");
 
     client_sender
         .send(TcpWarpMessage::Disconnect { connection_id })
