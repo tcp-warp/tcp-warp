@@ -1,6 +1,6 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use failure::Fail;
-use futures::{prelude::*, stream::SplitSink, try_join};
+use futures::{future::FutureExt, pin_mut, prelude::*, select, stream::SplitSink, try_join};
 use log::*;
 use std::{
     collections::HashMap,

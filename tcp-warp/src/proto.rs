@@ -51,6 +51,16 @@ impl Encoder for TcpWarpProto {
                 dst.put_u8(5);
                 dst.put_u128(connection_id.as_u128());
             }
+            TcpWarpMessage::DisconnectHost { connection_id } => {
+                dst.reserve(1 + 16);
+                dst.put_u8(6);
+                dst.put_u128(connection_id.as_u128());
+            }
+            TcpWarpMessage::DisconnectClient { connection_id } => {
+                dst.reserve(1 + 16);
+                dst.put_u8(7);
+                dst.put_u128(connection_id.as_u128());
+            }
             other => {
                 error!("unknown message: {:?}", other);
             }
@@ -126,6 +136,18 @@ impl Decoder for TcpWarpProto {
                 let connection_id = Uuid::from_slice(&header).unwrap();
                 Some(TcpWarpMessage::Connected { connection_id })
             }
+            Some(6) if src.len() > (16) => {
+                src.advance(1);
+                let header = src.split_to(16);
+                let connection_id = Uuid::from_slice(&header).unwrap();
+                Some(TcpWarpMessage::DisconnectHost { connection_id })
+            }
+            Some(7) if src.len() > (16) => {
+                src.advance(1);
+                let header = src.split_to(16);
+                let connection_id = Uuid::from_slice(&header).unwrap();
+                Some(TcpWarpMessage::DisconnectClient { connection_id })
+            }
             _ => {
                 debug!("looks like data is wrong {:?}", src);
                 None
@@ -140,6 +162,8 @@ impl Decoder for TcpWarpProto {
 /// 3 - bytes client u128 u32 len * u8
 /// 4 - bytes host u128 u32 len * u8
 /// 5 - connected u128
+/// 6 - disconnect host u128
+/// 7 - disconnect client u128
 #[derive(Debug)]
 pub enum TcpWarpMessage {
     AddPorts(Vec<u16>),
@@ -167,7 +191,10 @@ pub enum TcpWarpMessage {
         connection_id: Uuid,
         host_port: u16,
     },
-    Disconnect {
+    DisconnectHost {
+        connection_id: Uuid,
+    },
+    DisconnectClient {
         connection_id: Uuid,
     },
 }

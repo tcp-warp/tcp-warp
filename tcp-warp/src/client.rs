@@ -48,9 +48,19 @@ impl TcpWarpClient {
                             host_port,
                         }
                     }
-                    TcpWarpMessage::Disconnect { ref connection_id } => {
+                    TcpWarpMessage::DisconnectClient { ref connection_id } => {
                         connections.remove(connection_id);
-                        break;
+                        message
+                    }
+                    TcpWarpMessage::DisconnectHost { ref connection_id } => {
+                        if let Some(mut connection) = connections.remove(connection_id) {
+                            if let Err(err) = connection.sender.send(message).await {
+                                error!("cannot send to channel: {}", err);
+                            }
+                        } else {
+                            error!("connection not found: {}", connection_id);
+                        }
+                        continue;
                     }
                     TcpWarpMessage::Connected { ref connection_id } => {
                         if let Some(connection) = connections.get_mut(&connection_id) {
@@ -199,7 +209,8 @@ async fn process(
         debug!("no more messages, closing forward task");
 
         Ok::<(), io::Error>(())
-    };
+    }
+        .fuse();
 
     let (connected_sender, connected_receiver) = oneshot::channel();
 
@@ -227,13 +238,23 @@ async fn process(
         debug!("processing task for incoming connection finished");
 
         Ok::<(), io::Error>(())
-    };
+    }
+        .fuse();
 
-    try_join!(forward_task, processing_task)?;
+    pin_mut!(forward_task, processing_task);
+
+    select! {
+        r1 = forward_task => debug!("finished fw task: {:?}", r1),
+        r2 = processing_task => debug!("finished ps task: {:?}", r2),
+    }
+
+    debug!("sending disconnect event to {}", connection_id);
 
     host_sender
-        .send(TcpWarpMessage::Disconnect { connection_id })
+        .send(TcpWarpMessage::DisconnectClient { connection_id })
         .await?;
+
+    debug!("full complete process");
 
     Ok(())
 }
