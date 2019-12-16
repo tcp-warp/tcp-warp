@@ -33,9 +33,16 @@ impl TcpWarpClient {
                         connection_id,
                         sender,
                         host_port,
+                        connected_sender,
                     } => {
                         debug!("adding connection: {}", connection_id);
-                        connections.insert(connection_id.clone(), sender.clone());
+                        connections.insert(
+                            connection_id.clone(),
+                            TcpWarpConnection {
+                                sender,
+                                connected_sender,
+                            },
+                        );
                         TcpWarpMessage::HostConnect {
                             connection_id,
                             host_port,
@@ -49,16 +56,20 @@ impl TcpWarpClient {
                         connection_id,
                         data,
                     } => {
-                        if let Some(sender) = connections.get_mut(&connection_id) {
+                        if let Some(connection) = connections.get_mut(&connection_id) {
                             debug!(
                                 "forward message to host port of connection: {}",
                                 connection_id
                             );
-                            if let Err(err) =
-                                sender.send(TcpWarpMessage::BytesServer { data }).await
+                            if let Err(err) = connection
+                                .sender
+                                .send(TcpWarpMessage::BytesServer { data })
+                                .await
                             {
                                 error!("cannot send to channel: {}", err);
                             };
+                        } else {
+                            error!("connection not found: {}", connection_id);
                         }
                         continue;
                     }
@@ -144,13 +155,6 @@ fn client_port(mapping: &[TcpWarpPortMap], host_port: u16) -> Option<u16> {
         .map(|x| x.client_port)
 }
 
-fn host_port(mapping: &[TcpWarpPortMap], client_port: u16) -> Option<u16> {
-    mapping
-        .iter()
-        .find(|x| x.client_port == client_port)
-        .map(|x| x.host_port)
-}
-
 async fn process(
     stream: TcpStream,
     mut host_sender: Sender<TcpWarpMessage>,
@@ -178,16 +182,21 @@ async fn process(
         Ok::<(), io::Error>(())
     };
 
+    let (connected_sender, connected_receiver) = oneshot::channel();
     host_sender
         .send(TcpWarpMessage::Connect {
             connection_id,
             host_port,
             sender: client_sender,
+            connected_sender,
         })
         .await?;
 
     let mut host_sender_ = host_sender.clone();
     let processing_task = async move {
+        if let Err(err) = connected_receiver.await {
+            error!("connection error: {}", err);
+        }
         while let Some(Ok(message)) = rtransport.next().await {
             if let Err(err) = host_sender_.send(message).await {
                 error!("{}", err);

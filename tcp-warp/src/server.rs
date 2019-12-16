@@ -3,13 +3,15 @@ use super::*;
 pub struct TcpWarpServer {
     listen_address: SocketAddr,
     connect_address: IpAddr,
+    ports: Vec<u16>,
 }
 
 impl TcpWarpServer {
-    pub fn new(listen_address: SocketAddr, connect_address: IpAddr) -> Self {
+    pub fn new(listen_address: SocketAddr, connect_address: IpAddr, ports: Vec<u16>) -> Self {
         Self {
             listen_address,
             connect_address,
+            ports,
         }
     }
 
@@ -19,8 +21,9 @@ impl TcpWarpServer {
         let connect_address = self.connect_address;
 
         while let Some(Ok(stream)) = incoming.next().await {
+            let ports = self.ports.clone();
             spawn(async move {
-                if let Err(e) = process(stream, connect_address).await {
+                if let Err(e) = process(stream, connect_address, ports).await {
                     println!("failed to process connection; error = {}", e);
                 }
             });
@@ -29,12 +32,14 @@ impl TcpWarpServer {
     }
 }
 
-async fn process(stream: TcpStream, connect_address: IpAddr) -> Result<(), Box<dyn Error>> {
+async fn process(
+    stream: TcpStream,
+    connect_address: IpAddr,
+    ports: Vec<u16>,
+) -> Result<(), Box<dyn Error>> {
     let mut transport = Framed::new(stream, TcpWarpProto);
 
-    transport
-        .send(TcpWarpMessage::AddPorts(vec![8081, 8082]))
-        .await?;
+    transport.send(TcpWarpMessage::AddPorts(ports)).await?;
 
     let (mut wtransport, mut rtransport) = transport.split();
 
@@ -50,22 +55,35 @@ async fn process(stream: TcpStream, connect_address: IpAddr) -> Result<(), Box<d
                 TcpWarpMessage::Connect {
                     connection_id,
                     sender,
+                    connected_sender,
                     host_port: _,
                 } => {
                     debug!("adding connection: {}", connection_id);
+                    if let Err(err) = connected_sender.send(Ok(())) {
+                        error!("connected sender errored: {:?}", err);
+                    }
                     connections.insert(connection_id.clone(), sender.clone());
+                    wtransport.send(TcpWarpMessage::Connected { connection_id }).await?;
                     continue;
                 }
                 TcpWarpMessage::Disconnect { ref connection_id } => {
                     connections.remove(connection_id);
                     break;
                 }
-                TcpWarpMessage::BytesClient { connection_id, data } => {
+                TcpWarpMessage::BytesClient {
+                    connection_id,
+                    data,
+                } => {
                     if let Some(sender) = connections.get_mut(&connection_id) {
-                        debug!("forward message to host port of connection: {}", connection_id);
+                        debug!(
+                            "forward message to host port of connection: {}",
+                            connection_id
+                        );
                         if let Err(err) = sender.send(TcpWarpMessage::BytesServer { data }).await {
                             error!("cannot send to channel: {}", err);
                         };
+                    } else {
+                        error!("connection not found: {}", connection_id);
                     }
                 }
                 _ => wtransport.send(message).await?,
@@ -126,7 +144,7 @@ async fn process_client_to_host_message(
             if let Err(err) = client_sender.send(message).await {
                 error!("cannot send message to forward channel: {}", err);
             }
-        },
+        }
         other_message => warn!("unsupported message: {:?}", other_message),
     }
     Ok(())
@@ -159,16 +177,22 @@ async fn process_host_connection(
         Ok::<(), io::Error>(())
     };
 
+    let (connected_sender, connected_receiver) = oneshot::channel();
+
     client_sender
         .send(TcpWarpMessage::Connect {
             connection_id,
             host_port,
             sender: host_sender,
+            connected_sender,
         })
         .await?;
     debug!("sended connect to client");
     let mut client_sender_ = client_sender.clone();
     let processing_task = async move {
+        if let Err(err) = connected_receiver.await {
+            error!("connection error: {}", err);
+        }
         while let Some(Ok(message)) = rtransport.next().await {
             if let Err(err) = client_sender_.send(message).await {
                 error!("{}", err);

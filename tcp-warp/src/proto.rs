@@ -118,8 +118,7 @@ impl Decoder for TcpWarpProto {
             _ => {
                 debug!("looks like data is wrong {:?}", src);
                 None
-            }
-            // _ => None,
+            } // _ => None,
         })
     }
 }
@@ -128,10 +127,14 @@ impl Decoder for TcpWarpProto {
 /// 1 - add ports u16 len * u16
 /// 2 - host connect u128 u16
 /// 3 - bytes client u128 u32 len * u8
-/// 3 - bytes host u128 u32 len * u8
+/// 4 - bytes host u128 u32 len * u8
+/// 5 - connected u128
 #[derive(Debug)]
 pub enum TcpWarpMessage {
     AddPorts(Vec<u16>),
+    Connected {
+        connection_id: Uuid,
+    },
     BytesClient {
         connection_id: Uuid,
         data: BytesMut,
@@ -147,6 +150,7 @@ pub enum TcpWarpMessage {
         connection_id: Uuid,
         host_port: u16,
         sender: Sender<TcpWarpMessage>,
+        connected_sender: oneshot::Sender<Result<(), io::Error>>,
     },
     HostConnect {
         connection_id: Uuid,

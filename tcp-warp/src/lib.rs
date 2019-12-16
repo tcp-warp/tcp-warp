@@ -14,7 +14,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
     prelude::*,
     spawn,
-    sync::mpsc::{channel, Receiver, Sender},
+    sync::{mpsc::{channel, Receiver, Sender}, oneshot},
 };
 use tokio_util::codec::{Decoder, Encoder, Framed};
 use uuid::Uuid;
@@ -51,4 +51,9 @@ impl FromStr for TcpWarpPortMap {
             _ => Err(TcpWarpParseError),
         }
     }
+}
+
+struct TcpWarpConnection {
+    sender: Sender<TcpWarpMessage>,
+    connected_sender: oneshot::Sender<Result<(), io::Error>>,
 }

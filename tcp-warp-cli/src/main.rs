@@ -50,7 +50,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .connect()
             .await
         }
-        Server { listen, connect } => {
+        Server {
+            listen,
+            connect,
+            port,
+        } => {
             TcpWarpServer::new(
                 listen
                     .unwrap_or_else(|| DEFAULT_SERVER_LISTEN.into())
@@ -58,6 +62,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 connect
                     .unwrap_or_else(|| DEFAULT_SERVER_CONNECT.into())
                     .parse()?,
+                port,
             )
             .listen()
             .await
