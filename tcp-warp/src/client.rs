@@ -48,17 +48,11 @@ impl TcpWarpClient {
                             host_port,
                         }
                     }
-                    TcpWarpMessage::DisconnectClient { ref connection_id } => {
-                        connections.remove(connection_id);
-                        message
-                    }
                     TcpWarpMessage::DisconnectHost { ref connection_id } => {
                         if let Some(mut connection) = connections.remove(connection_id) {
                             if let Err(err) = connection.sender.send(message).await {
                                 error!("cannot send to channel: {}", err);
                             }
-                        } else {
-                            error!("connection not found: {}", connection_id);
                         }
                         continue;
                     }
@@ -173,6 +167,14 @@ async fn process_host_to_client_message(
                 error!("cannot send message Connected to forward channel: {}", err);
             }
         }
+        TcpWarpMessage::DisconnectHost { .. } => {
+            if let Err(err) = sender.send(message).await {
+                error!(
+                    "cannot send message DisconnectHost to forward channel: {}",
+                    err
+                );
+            }
+        }
         other_message => warn!("unsupported message: {:?}", other_message),
     }
     Ok(())
@@ -203,14 +205,17 @@ async fn process(
         debug!("in receiver task");
         while let Some(message) = client_receiver.next().await {
             debug!("just received a message process: {:?}", message);
+            match message {
+                TcpWarpMessage::DisconnectHost { .. } => break,
+                _ => (),
+            }
             wtransport.send(message).await?;
         }
 
         debug!("no more messages, closing forward task");
 
         Ok::<(), io::Error>(())
-    }
-        .fuse();
+    };
 
     let (connected_sender, connected_receiver) = oneshot::channel();
 
@@ -235,24 +240,23 @@ async fn process(
             }
         }
 
-        debug!("processing task for incoming connection finished");
+        debug!(
+            "processing task for incoming connection finished {}",
+            connection_id
+        );
+
+        debug!("sending disconnect event to {}", connection_id);
+        if let Err(err) = host_sender_
+            .send(TcpWarpMessage::DisconnectClient { connection_id })
+            .await
+        {
+            error!("{}", err);
+        }
 
         Ok::<(), io::Error>(())
-    }
-        .fuse();
+    };
 
-    pin_mut!(forward_task, processing_task);
-
-    select! {
-        r1 = forward_task => debug!("finished fw task: {:?}", r1),
-        r2 = processing_task => debug!("finished ps task: {:?}", r2),
-    }
-
-    debug!("sending disconnect event to {}", connection_id);
-
-    host_sender
-        .send(TcpWarpMessage::DisconnectClient { connection_id })
-        .await?;
+    try_join!(forward_task, processing_task)?;
 
     debug!("full complete process");
 

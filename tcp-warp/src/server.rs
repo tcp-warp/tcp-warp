@@ -65,10 +65,6 @@ async fn process(
                     connections.insert(connection_id.clone(), sender.clone());
                     TcpWarpMessage::Connected { connection_id }
                 }
-                TcpWarpMessage::DisconnectHost { ref connection_id } => {
-                    connections.remove(connection_id);
-                    message
-                }
                 TcpWarpMessage::DisconnectClient { ref connection_id } => {
                     if let Some(mut sender) = connections.remove(connection_id) {
                         if let Err(err) = sender.send(message).await {
@@ -236,6 +232,15 @@ async fn process_host_connection(
             }
         }
 
+        debug!("sending disconnect host: {}", connection_id);
+
+        if let Err(err) = client_sender_
+            .send(TcpWarpMessage::DisconnectHost { connection_id })
+            .await
+        {
+            error!("{}", err);
+        }
+
         debug!("host connection processing task done");
 
         Ok::<(), io::Error>(())
@@ -243,11 +248,7 @@ async fn process_host_connection(
 
     try_join!(forward_task, processing_task)?;
 
-    debug!("disconnect");
-
-    client_sender
-        .send(TcpWarpMessage::DisconnectHost { connection_id })
-        .await?;
+    debug!("disconnect {}", connection_id);
 
     Ok(())
 }

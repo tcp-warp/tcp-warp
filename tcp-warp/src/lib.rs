@@ -1,6 +1,6 @@
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use failure::Fail;
-use futures::{future::FutureExt, pin_mut, prelude::*, select, stream::SplitSink, try_join};
+use futures::{prelude::*, try_join};
 use log::*;
 use std::{
     collections::HashMap,
@@ -8,14 +8,13 @@ use std::{
     error::Error,
     net::{IpAddr, SocketAddr},
     str::FromStr,
-    sync::{Arc, Mutex},
 };
 use tokio::{
     net::{TcpListener, TcpStream},
     prelude::*,
     spawn,
     sync::{
-        mpsc::{channel, Receiver, Sender},
+        mpsc::{channel, Sender},
         oneshot,
     },
 };
