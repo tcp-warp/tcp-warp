@@ -105,6 +105,8 @@ impl TcpWarpClient {
                     .await?;
             }
 
+            debug!("processing task for host to client finished");
+
             Ok::<(), io::Error>(())
         };
 
@@ -131,7 +133,7 @@ async fn process_host_to_client_message(
                 spawn(async move {
                     let mut listener = TcpListener::bind(bind_address).await?;
 
-                    info!("listen: {:?}", bind_address);
+                    debug!("listen: {:?}", bind_address);
 
                     let mut incoming = listener.incoming();
 
@@ -139,13 +141,13 @@ async fn process_host_to_client_message(
                         let sender__ = sender_.clone();
 
                         spawn(async move {
-                            if let Err(e) = process(stream, sender__, host_port, port).await {
-                                info!("failed to process connection; error = {}", e);
+                            if let Err(e) = process(stream, sender__, host_port).await {
+                                error!("failed to process connection; error = {}", e);
                             }
                         });
                     }
 
-                    info!("done listen: {:?}", bind_address);
+                    debug!("done listen: {:?}", bind_address);
 
                     Ok::<(), io::Error>(())
                 });
@@ -177,7 +179,6 @@ async fn process(
     stream: TcpStream,
     mut host_sender: Sender<TcpWarpMessage>,
     host_port: u16,
-    client_port: u16,
 ) -> Result<(), Box<dyn Error>> {
     let connection_id = Uuid::new_v4();
 
@@ -201,6 +202,7 @@ async fn process(
     };
 
     let (connected_sender, connected_receiver) = oneshot::channel();
+
     host_sender
         .send(TcpWarpMessage::Connect {
             connection_id,
@@ -215,11 +217,15 @@ async fn process(
         if let Err(err) = connected_receiver.await {
             error!("connection error: {}", err);
         }
+
         while let Some(Ok(message)) = rtransport.next().await {
             if let Err(err) = host_sender_.send(message).await {
                 error!("{}", err);
             }
         }
+
+        debug!("processing task for incoming connection finished");
+
         Ok::<(), io::Error>(())
     };
 
