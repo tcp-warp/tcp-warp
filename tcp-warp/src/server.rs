@@ -105,14 +105,11 @@ async fn process(
     let processing_task = async move {
         while let Some(Ok(message)) = rtransport.next().await {
             debug!("received {:?}", message);
-            let sender_ = sender.clone();
-            spawn(async move {
-                if let Err(err) =
-                    process_client_to_host_message(message, sender_, connect_address).await
-                {
-                    error!("error in processing: {}", err);
-                }
-            });
+            if let Err(err) =
+                process_client_to_host_message(message, sender.clone(), connect_address).await
+            {
+                error!("error in processing: {}", err);
+            }
         }
 
         debug!("processing task for client to host finished");
