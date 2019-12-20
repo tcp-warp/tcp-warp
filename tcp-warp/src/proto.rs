@@ -204,18 +204,11 @@ pub struct TcpWarpProtoClient {
 }
 
 impl Encoder for TcpWarpProtoClient {
-    type Item = TcpWarpMessage;
+    type Item = BytesMut;
     type Error = io::Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> io::Result<()> {
-        match item {
-            TcpWarpMessage::BytesServer { data } => {
-                dst.extend_from_slice(&data);
-            }
-            _ => {
-                error!("unsupported message");
-            }
-        }
+        dst.extend_from_slice(&item);
         Ok(())
     }
 }
@@ -241,18 +234,11 @@ pub struct TcpWarpProtoHost {
 }
 
 impl Encoder for TcpWarpProtoHost {
-    type Item = TcpWarpMessage;
+    type Item = BytesMut;
     type Error = io::Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> io::Result<()> {
-        match item {
-            TcpWarpMessage::BytesServer { data } => {
-                dst.extend_from_slice(&data);
-            }
-            _ => {
-                error!("unsupported message");
-            }
-        }
+        dst.extend_from_slice(&item);
         Ok(())
     }
 }

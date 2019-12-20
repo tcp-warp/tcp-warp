@@ -194,9 +194,9 @@ async fn process_host_connection(
             debug!("just received a message: {:?}", message);
             match message {
                 TcpWarpMessage::DisconnectClient { .. } => break,
+                TcpWarpMessage::BytesServer { data } => wtransport.send(data).await?,
                 _ => (),
             }
-            wtransport.send(message).await?;
         }
 
         debug!("no more messages, closing process host forward task");

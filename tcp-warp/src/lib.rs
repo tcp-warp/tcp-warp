@@ -1,4 +1,4 @@
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use failure::Fail;
 use futures::{prelude::*, try_join};
 use log::*;
