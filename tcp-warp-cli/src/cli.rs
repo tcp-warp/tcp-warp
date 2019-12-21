@@ -1,9 +1,9 @@
 use structopt::StructOpt;
 use tcp_warp::TcpWarpPortMap;
 
-/// Allows to create userspace tunnel between two hosts
+/// An utility to create userspace tunnel between two hosts
 /// mapping ports on client machine to hosts and ports
-/// accessible from server machine using only single port.
+/// accessible from server machine using single port.
 #[derive(StructOpt)]
 pub struct Cli {
     #[structopt(flatten)]

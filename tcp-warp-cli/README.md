@@ -8,9 +8,8 @@ Dual-licensed under `MIT` or the [UNLICENSE](http://unlicense.org/).
 
 ## Usage
 
-Add dependency to Cargo.toml:
+Install with cargo:
 
 ```toml
-[dependencies]
-tcp-warp-cli = "0.1"
+cargo install -f --path .
 ```

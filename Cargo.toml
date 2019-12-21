@@ -5,5 +5,9 @@ members = [
 "tcp-warp-cli"
 ]
 
+# exclude = [
+# "tcp-warp-cli"
+# ]
+
 [profile.release]
 lto = true

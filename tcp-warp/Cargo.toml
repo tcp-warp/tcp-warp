@@ -4,13 +4,15 @@ version = '0.1.0'
 authors = ['Alexander Korolev <kilork@yandex.ru>']
 edition = '2018'
 description = '''
-tcp-warp description.
+An userspace tunnel between two hosts
+mapping ports on client machine to hosts and ports
+accessible from server machine using single port.
 '''
-homepage = 'https://github.com/kilork/tcp-warp'
+homepage = 'https://github.com/tcp-warp/tcp-warp'
 keywords = []
 license = 'Unlicense OR MIT'
 readme = 'README.md'
-repository = 'https://github.com/kilork/tcp-warp'
+repository = 'https://github.com/tcp-warp/tcp-warp'
 
 [dependencies]
 bytes = '0.5'
