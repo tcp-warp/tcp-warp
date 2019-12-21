@@ -3,25 +3,36 @@ name = 'tcp-warp'
 version = '0.1.0'
 authors = ['Alexander Korolev <kilork@yandex.ru>']
 edition = '2018'
-description = """
-tcp-warp description.
-"""
-homepage = "https://github.com/kilork/tcp-warp"
+description = '''
+An userspace tunnel between two hosts
+mapping ports on client machine to hosts and ports
+accessible from server machine using single port.
+'''
+homepage = 'https://github.com/tcp-warp/tcp-warp'
 keywords = []
-license = "Unlicense OR MIT"
-readme = "README.md"
-repository = "https://github.com/kilork/tcp-warp"
+license = 'Unlicense OR MIT'
+readme = 'README.md'
+repository = 'https://github.com/tcp-warp/tcp-warp'
 
 [dependencies]
 bytes = '0.5'
-failure = '0.1'
 futures = '0.3'
 log = '0.4'
 
+[dependencies.uuid]
+version = '0.8'
+features = ['v4']
+
 [dependencies.tokio]
 version = '0.2'
-features = ['full']
+features = [
+    'io-util',
+    'tcp',
+    'rt-core',
+    'sync',
+    'stream',
+]
 
 [dependencies.tokio-util]
 version = '0.2'
-features = ['full']
+features = ['codec']

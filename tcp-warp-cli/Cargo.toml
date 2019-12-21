@@ -1,31 +1,32 @@
-[package]
-name = "tcp-warp-cli"
-version = "0.1.0"
-authors = ["Alexander Korolev <kilork@yandex.ru>"]
-edition = "2018"
-categories = []
-description = """
-tcp-warp-cli description.
-"""
-homepage = "https://github.com/kilork/tcp-warp-cli"
-keywords = []
-license = "Unlicense OR MIT"
-readme = "README.md"
-repository = "https://github.com/kilork/tcp-warp-cli"
+[[bin]]
+path = 'src/main.rs'
+name = 'tcp-warp'
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[package]
+name = 'tcp-warp-cli'
+version = '0.1.0'
+authors = ['Alexander Korolev <kilork@yandex.ru>']
+edition = '2018'
+categories = []
+description = '''
+tcp-warp-cli description.
+'''
+homepage = 'https://github.com/tcp-warp/tcp-warp'
+keywords = []
+license = 'Unlicense OR MIT'
+readme = 'README.md'
+repository = 'https://github.com/tcp-warp/tcp-warp'
 
 [dependencies]
+log = '0.4'
+env_logger = '0.7'
+clap-verbosity-flag = '0.3.0'
+structopt = '0.3'
+tcp-warp = '0.1'
 
-tcp-warp = { path = "../tcp-warp" }
+[dependencies.tokio]
+version = '0.2'
+features = ['macros']
 
-tokio = "0.2"
-
-log = "0.4"
-env_logger = "0.7"
-clap-verbosity-flag = "0.3.0"
-
-failure = "0.1"
-exitfailure = "0.5"
-
-structopt = "0.3"
+[profile.release]
+lto = true
