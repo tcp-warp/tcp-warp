@@ -66,6 +66,10 @@ async fn process(
                     TcpWarpMessage::Connected { connection_id }
                 }
                 TcpWarpMessage::DisconnectClient { ref connection_id } => {
+                    debug!(
+                        "{} client connection disconnected, handle server disconnect",
+                        connection_id
+                    );
                     if let Some(mut sender) = connections.remove(connection_id) {
                         if let Err(err) = sender.send(message).await {
                             error!("cannot send to channel: {}", err);
@@ -73,6 +77,7 @@ async fn process(
                     } else {
                         error!("connection not found: {}", connection_id);
                     }
+                    debug!("connections in pool: {}", connections.len());
                     continue;
                 }
                 TcpWarpMessage::BytesClient {
@@ -94,17 +99,20 @@ async fn process(
                 }
                 regular_message => regular_message,
             };
+            debug!("sending message {:?} from server to tunnel client", message);
             wtransport.send(message).await?
         }
 
-        debug!("no more messages, closing forward task");
+        debug!("no more messages, closing forward to tunnel client task");
+        wtransport.close().await?;
+        receiver.close();
 
         Ok::<(), io::Error>(())
     };
 
     let processing_task = async move {
         while let Some(Ok(message)) = rtransport.next().await {
-            debug!("received {:?}", message);
+            debug!("server received from tunnel client {:?}", message);
             if let Err(err) =
                 process_client_to_host_message(message, sender.clone(), connect_address).await
             {
@@ -112,14 +120,14 @@ async fn process(
             }
         }
 
-        debug!("processing task for client to host finished");
+        debug!("processing task for client to host tunnel finished");
 
         Ok::<(), io::Error>(())
     };
 
     let (_, _) = try_join!(forward_task, processing_task)?;
 
-    debug!("finished process");
+    debug!("finished process of tonnel connection");
 
     Ok(())
 }
@@ -179,7 +187,7 @@ async fn process_host_connection(
     connection_id: Uuid,
     host_port: u16,
 ) -> Result<(), Box<dyn Error>> {
-    debug!("new connection: {}", connection_id);
+    debug!("{} new connection", connection_id);
     let stream = TcpStream::connect(connect_address).await?;
 
     let (mut wtransport, mut rtransport) =
@@ -188,10 +196,10 @@ async fn process_host_connection(
     let (host_sender, mut host_receiver) = channel(100);
 
     let forward_task = async move {
-        debug!("in receiver task process_host_connection");
+        debug!("{} in receiver task process_host_connection", connection_id);
 
         while let Some(message) = host_receiver.next().await {
-            debug!("just received a message: {:?}", message);
+            debug!("{} just received a message: {:?}", connection_id, message);
             match message {
                 TcpWarpMessage::DisconnectClient { .. } => break,
                 TcpWarpMessage::BytesServer { data } => wtransport.send(data).await?,
@@ -199,7 +207,13 @@ async fn process_host_connection(
             }
         }
 
-        debug!("no more messages, closing process host forward task");
+        debug!(
+            "{} no more messages, closing process host forward task",
+            connection_id
+        );
+        wtransport.close().await?;
+        host_receiver.close();
+        debug!("{} closed write transport", connection_id);
 
         Ok::<(), io::Error>(())
     };
@@ -215,37 +229,36 @@ async fn process_host_connection(
         })
         .await?;
 
-    debug!("sended connect to client");
+    debug!("{} sended connect to client", connection_id);
 
     let mut client_sender_ = client_sender.clone();
 
     let processing_task = async move {
         if let Err(err) = connected_receiver.await {
-            error!("connection error: {}", err);
+            error!("{} connection error: {}", connection_id, err);
         }
         while let Some(Ok(message)) = rtransport.next().await {
             if let Err(err) = client_sender_.send(message).await {
-                error!("{}", err);
+                error!("{} {}", connection_id, err);
             }
         }
 
-        debug!("sending disconnect host: {}", connection_id);
+        let message = TcpWarpMessage::DisconnectHost { connection_id };
 
-        if let Err(err) = client_sender_
-            .send(TcpWarpMessage::DisconnectHost { connection_id })
-            .await
-        {
-            error!("{}", err);
+        debug!("{} sending disconnect host message", connection_id);
+
+        if let Err(err) = client_sender_.send(message).await {
+            error!("{} err: {}", connection_id, err);
         }
 
-        debug!("host connection processing task done");
+        debug!("{} host connection processing task done", connection_id);
 
         Ok::<(), io::Error>(())
     };
 
     try_join!(forward_task, processing_task)?;
 
-    debug!("disconnect {}", connection_id);
+    debug!("{} disconnect, processing task done", connection_id);
 
     Ok(())
 }

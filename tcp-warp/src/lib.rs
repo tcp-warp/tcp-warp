@@ -1,5 +1,4 @@
-use bytes::{Buf, BufMut, Bytes, BytesMut};
-use failure::Fail;
+use bytes::{Buf, BufMut, BytesMut};
 use futures::{prelude::*, try_join};
 use log::*;
 use std::{
@@ -35,12 +34,8 @@ pub struct TcpWarpPortMap {
     client_port: u16,
 }
 
-#[derive(Debug, Fail)]
-#[fail(display = "cannot parse port mapping")]
-pub struct TcpWarpParseError;
-
 impl FromStr for TcpWarpPortMap {
-    type Err = TcpWarpParseError;
+    type Err = io::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut parts = s.split(':').map(FromStr::from_str);
@@ -50,7 +45,10 @@ impl FromStr for TcpWarpPortMap {
                 host_port,
                 client_port,
             }),
-            _ => Err(TcpWarpParseError),
+            _ => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "cannot parse port mapping",
+            )),
         }
     }
 }

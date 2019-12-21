@@ -53,7 +53,10 @@ impl TcpWarpClient {
                             if let Err(err) = connection.sender.send(message).await {
                                 error!("cannot send to channel: {}", err);
                             }
+                        } else {
+                            error!("connection not found: {}", connection_id);
                         }
+                        debug!("connections in pool: {}", connections.len());
                         continue;
                     }
                     TcpWarpMessage::Connected { ref connection_id } => {
@@ -92,10 +95,14 @@ impl TcpWarpClient {
                     }
                     regular_message => regular_message,
                 };
+                debug!("sending message {:?} from client to tunnel server", message);
                 wtransport.send(message).await?;
             }
 
             debug!("no more messages, closing forward task");
+
+            wtransport.close().await?;
+            receiver.close();
 
             Ok::<(), io::Error>(())
         };
@@ -126,6 +133,8 @@ async fn process_host_to_client_message(
     mapping: &[TcpWarpPortMap],
     bind_address: IpAddr,
 ) -> Result<(), io::Error> {
+    debug!("{} host to client: {:?}", bind_address, message);
+
     match message {
         TcpWarpMessage::AddPorts(host_ports) => {
             for host_port in host_ports {
@@ -204,7 +213,10 @@ async fn process(
     let forward_task = async move {
         debug!("in receiver task");
         while let Some(message) = client_receiver.next().await {
-            debug!("just received a message process: {:?}", message);
+            debug!(
+                "{} just received a message process: {:?}",
+                connection_id, message
+            );
             match message {
                 TcpWarpMessage::DisconnectHost { .. } => break,
                 TcpWarpMessage::BytesServer { data } => wtransport.send(data).await?,
@@ -212,7 +224,14 @@ async fn process(
             }
         }
 
-        debug!("no more messages, closing forward task");
+        debug!("{} no more messages, closing forward task", connection_id);
+        debug!(
+            "{} closing write channel to client side port",
+            connection_id
+        );
+        wtransport.close().await?;
+        client_receiver.close();
+        debug!("{} write channel to client side port closed", connection_id);
 
         Ok::<(), io::Error>(())
     };
@@ -228,37 +247,35 @@ async fn process(
         })
         .await?;
 
-    let mut host_sender_ = host_sender.clone();
     let processing_task = async move {
         if let Err(err) = connected_receiver.await {
-            error!("connection error: {}", err);
+            error!("{} connection error: {}", connection_id, err);
         }
 
         while let Some(Ok(message)) = rtransport.next().await {
-            if let Err(err) = host_sender_.send(message).await {
-                error!("{}", err);
+            if let Err(err) = host_sender.send(message).await {
+                error!("{} {}", connection_id, err);
             }
         }
 
         debug!(
-            "processing task for incoming connection finished {}",
+            "{} processing task for incoming connection finished",
             connection_id
         );
 
-        debug!("sending disconnect event to {}", connection_id);
-        if let Err(err) = host_sender_
-            .send(TcpWarpMessage::DisconnectClient { connection_id })
-            .await
-        {
-            error!("{}", err);
+        let message = TcpWarpMessage::DisconnectClient { connection_id };
+        debug!("{} sending disconnect message {:?}", connection_id, message);
+        if let Err(err) = host_sender.send(message).await {
+            error!("{} {}", connection_id, err);
         }
+        debug!("{} done processing", connection_id);
 
         Ok::<(), io::Error>(())
     };
 
     try_join!(forward_task, processing_task)?;
 
-    debug!("full complete process");
+    debug!("{} full complete process", connection_id);
 
     Ok(())
 }

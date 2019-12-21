@@ -14,15 +14,23 @@ repository = 'https://github.com/kilork/tcp-warp'
 
 [dependencies]
 bytes = '0.5'
-failure = '0.1'
 futures = '0.3'
 log = '0.4'
-uuid = {version='0.8', features = ['v4']}
+
+[dependencies.uuid]
+version = '0.8'
+features = ['v4']
 
 [dependencies.tokio]
 version = '0.2'
-features = ['full']
+features = [
+    'io-util',
+    'tcp',
+    'rt-core',
+    'sync',
+    'stream',
+]
 
 [dependencies.tokio-util]
 version = '0.2'
-features = ['full']
+features = ['codec']

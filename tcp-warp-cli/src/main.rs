@@ -33,6 +33,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .map(|x| {
             LoggerBuilder::new()
                 .filter(None, x.to_level_filter())
+                .format_timestamp_nanos()
                 .try_init()
         })
         .transpose()?;
