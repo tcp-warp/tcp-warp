@@ -6,6 +6,8 @@ pub struct TcpWarpClient {
     map: Vec<TcpWarpPortMap>,
 }
 
+pub type TcpWarpClientResult = HashMap<Uuid, TcpWarpConnection>;
+
 impl TcpWarpClient {
     pub fn new(bind_address: IpAddr, server_address: SocketAddr, map: Vec<TcpWarpPortMap>) -> Self {
         Self {
@@ -15,16 +17,49 @@ impl TcpWarpClient {
         }
     }
 
-    pub async fn connect(&self) -> Result<(), Box<dyn Error>> {
-        let stream = TcpStream::connect(&self.server_address).await?;
+    pub async fn connect(&self) -> Result<TcpWarpClientResult, Box<dyn Error>> {
+        self.connect_with(HashMap::new()).await
+    }
+
+    pub async fn connect_loop(
+        &self,
+        retry_delay: Duration,
+        keep_connections: bool,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut connections = HashMap::new();
+
+        while let Ok(data) = self.connect_with(connections).await {
+            connections = if keep_connections {
+                data
+            } else {
+                HashMap::new()
+            };
+            warn!("retrying in {:?}", retry_delay);
+            delay_for(retry_delay).await;
+        }
+
+        Ok(())
+    }
+
+    async fn connect_with(
+        &self,
+        mut connections: TcpWarpClientResult,
+    ) -> Result<TcpWarpClientResult, Box<dyn Error>> {
+        let stream = match TcpStream::connect(&self.server_address).await {
+            Ok(stream) => stream,
+            Err(err) => {
+                error!("cannot connect to tunnel: {}", err);
+                return Ok(connections);
+            }
+        };
         let (mut wtransport, mut rtransport) = Framed::new(stream, TcpWarpProto).split();
 
-        let (sender, mut receiver) = channel(100);
+        let (mut sender, mut receiver) = channel(100);
 
         let forward_task = async move {
             debug!("in receiver task");
 
-            let mut connections = HashMap::new();
+            let mut listeners = vec![];
 
             while let Some(message) = receiver.next().await {
                 debug!("just received a message connect: {:?}", message);
@@ -47,6 +82,18 @@ impl TcpWarpClient {
                             connection_id,
                             host_port,
                         }
+                    }
+                    TcpWarpMessage::Listener(abort_handler) => {
+                        listeners.push(abort_handler);
+                        continue;
+                    }
+                    TcpWarpMessage::Disconnect => {
+                        debug!("stopping lesteners...");
+                        for listener in listeners {
+                            listener.abort();
+                        }
+                        debug!("stopped listeners");
+                        break;
                     }
                     TcpWarpMessage::DisconnectHost { ref connection_id } => {
                         if let Some(mut connection) = connections.remove(connection_id) {
@@ -104,7 +151,7 @@ impl TcpWarpClient {
             wtransport.close().await?;
             receiver.close();
 
-            Ok::<(), io::Error>(())
+            Ok::<TcpWarpClientResult, io::Error>(connections)
         };
 
         let mapping = self.map.clone();
@@ -118,12 +165,16 @@ impl TcpWarpClient {
 
             debug!("processing task for host to client finished");
 
+            if let Err(err) = sender.send(TcpWarpMessage::Disconnect).await {
+                error!("could not send disconnect message {}", err);
+            }
+
             Ok::<(), io::Error>(())
         };
 
-        let (_, _) = try_join!(forward_task, processing_task)?;
+        let (connections, _) = try_join!(forward_task, processing_task)?;
 
-        Ok(())
+        Ok(connections)
     }
 }
 
@@ -143,11 +194,16 @@ async fn process_host_to_client_message(
                 let bind_address = SocketAddr::new(bind_address, port);
                 let sender_ = sender.clone();
 
-                spawn(async move {
-                    let mut listener = TcpListener::bind(bind_address).await?;
+                let mut listener = match TcpListener::bind(bind_address).await {
+                    Ok(listener) => listener,
+                    Err(err) => {
+                        error!("could not start listen {}: {}", bind_address, err);
+                        return Err(err);
+                    }
+                };
+                debug!("listen: {:?}", bind_address);
 
-                    debug!("listen: {:?}", bind_address);
-
+                let abortable_feature = async move {
                     let mut incoming = listener.incoming();
 
                     while let Some(Ok(stream)) = incoming.next().await {
@@ -163,7 +219,12 @@ async fn process_host_to_client_message(
                     debug!("done listen: {:?}", bind_address);
 
                     Ok::<(), io::Error>(())
-                });
+                };
+                let (abortable_listener, abort_handler) = abortable(abortable_feature);
+                if let Err(err) = sender.send(TcpWarpMessage::Listener(abort_handler)).await {
+                    error!("cannot send message Listener to forward channel: {}", err);
+                }
+                spawn(abortable_listener);
             }
         }
         TcpWarpMessage::BytesHost { .. } => {

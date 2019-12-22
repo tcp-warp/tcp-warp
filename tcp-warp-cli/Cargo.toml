@@ -27,6 +27,3 @@ tcp-warp = '0.1'
 [dependencies.tokio]
 version = '0.2'
 features = ['macros']
-
-[profile.release]
-lto = true

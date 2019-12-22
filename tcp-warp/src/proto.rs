@@ -76,8 +76,12 @@ impl Decoder for TcpWarpProto {
 
     fn decode(&mut self, src: &mut BytesMut) -> io::Result<Option<TcpWarpMessage>> {
         Ok(match src.get(0) {
-            Some(1) if src.len() > 3 => {
+            Some(1) if src.len() > 2 => {
                 let len = u16::from_be_bytes(src[1..3].try_into().unwrap());
+                if src.len() == 3 && len == 0 {
+                    src.advance(3);
+                    return Ok(Some(TcpWarpMessage::AddPorts(vec![])));
+                }
                 if len as usize * 2 + 3 <= src.len() {
                     src.advance(3);
                     let data = src.split_to(len as usize * 2);
@@ -102,7 +106,7 @@ impl Decoder for TcpWarpProto {
             }
             Some(3) if src.len() > (16 + 4 + 1) => {
                 let len = u32::from_be_bytes(src[17..21].try_into().unwrap()) as usize;
-                if len as usize + 16 + 4 + 1 <= src.len() {
+                if len as usize + 16 + 4 < src.len() {
                     src.advance(1);
                     let header = src.split_to(20);
                     let connection_id = Uuid::from_slice(&header[0..16]).unwrap();
@@ -117,7 +121,7 @@ impl Decoder for TcpWarpProto {
             }
             Some(4) if src.len() > (16 + 4 + 1) => {
                 let len = u32::from_be_bytes(src[17..21].try_into().unwrap()) as usize;
-                if len as usize + 16 + 4 + 1 <= src.len() {
+                if len as usize + 16 + 4 < src.len() {
                     src.advance(1);
                     let header = src.split_to(20);
                     let connection_id = Uuid::from_slice(&header[0..16]).unwrap();
@@ -149,7 +153,7 @@ impl Decoder for TcpWarpProto {
                 Some(TcpWarpMessage::DisconnectClient { connection_id })
             }
             _ => {
-                debug!("looks like data is wrong {:?}", src);
+                debug!("looks like data is wrong [{}] {:?}", src.len(), src);
                 None
             } // _ => None,
         })
@@ -157,13 +161,13 @@ impl Decoder for TcpWarpProto {
 }
 
 /// Command types:
-/// 1 - add ports u16 len * u16
-/// 2 - host connect u128 u16
-/// 3 - bytes client u128 u32 len * u8
-/// 4 - bytes host u128 u32 len * u8
-/// 5 - connected u128
-/// 6 - disconnect host u128
-/// 7 - disconnect client u128
+/// - 1 - add ports u16 len * u16
+/// - 2 - host connect u128 u16
+/// - 3 - bytes client u128 u32 len * u8
+/// - 4 - bytes host u128 u32 len * u8
+/// - 5 - connected u128
+/// - 6 - disconnect host u128
+/// - 7 - disconnect client u128
 #[derive(Debug)]
 pub enum TcpWarpMessage {
     AddPorts(Vec<u16>),
@@ -187,6 +191,8 @@ pub enum TcpWarpMessage {
         sender: Sender<TcpWarpMessage>,
         connected_sender: oneshot::Sender<Result<(), io::Error>>,
     },
+    Disconnect,
+    Listener(AbortHandle),
     HostConnect {
         connection_id: Uuid,
         host_port: u16,
