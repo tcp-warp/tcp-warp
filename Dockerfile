@@ -11,6 +11,6 @@ RUN /root/.cargo/bin/cargo build --release --target=x86_64-unknown-linux-musl
 
 FROM alpine:3.9
 
-COPY --from=BUILD /src/target/x86_64-unknown-linux-musl/release/tcp-warp /
+COPY --from=BUILD /src/target/x86_64-unknown-linux-musl/release/tcp-warp /usr/bin/
 
-CMD /tcp-warp
+CMD /usr/bin/tcp-warp server
