@@ -13,7 +13,7 @@ cargo install tcp-warp-cli
 use env_logger::Builder as LoggerBuilder;
 use std::error::Error;
 use structopt::StructOpt;
-use tcp_warp::{TcpWarpClient, TcpWarpServer};
+use tcpwarp::{TcpWarpClient, TcpWarpServer};
 
 mod cli;
 

@@ -19,7 +19,7 @@ impl TcpWarpClient {
         let stream = TcpStream::connect(&self.server_address).await?;
         let (mut wtransport, mut rtransport) = Framed::new(stream, TcpWarpProto).split();
 
-        let (sender, mut receiver) = channel(100);
+        let (mut sender, mut receiver) = channel(100);
 
         let forward_task = async move {
             debug!("in receiver task");
@@ -48,6 +48,7 @@ impl TcpWarpClient {
                             host_port,
                         }
                     }
+                    TcpWarpMessage::Disconnect => break,
                     TcpWarpMessage::DisconnectHost { ref connection_id } => {
                         if let Some(mut connection) = connections.remove(connection_id) {
                             if let Err(err) = connection.sender.send(message).await {
@@ -117,6 +118,10 @@ impl TcpWarpClient {
             }
 
             debug!("processing task for host to client finished");
+
+            if let Err(err) = sender.send(TcpWarpMessage::Disconnect).await {
+                error!("could not send disconnect message {}", err);
+            }
 
             Ok::<(), io::Error>(())
         };

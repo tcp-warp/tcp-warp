@@ -11,3 +11,6 @@ members = [
 
 [profile.release]
 lto = true
+
+[patch.crates-io]
+tcp-warp = { path = 'tcp-warp' }

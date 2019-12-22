@@ -1,5 +1,5 @@
 use structopt::StructOpt;
-use tcp_warp::TcpWarpPortMap;
+use tcpwarp::TcpWarpPortMap;
 
 /// An utility to create userspace tunnel between two hosts
 /// mapping ports on client machine to hosts and ports

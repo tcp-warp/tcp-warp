@@ -127,7 +127,7 @@ async fn process(
 
     let (_, _) = try_join!(forward_task, processing_task)?;
 
-    debug!("finished process of tonnel connection");
+    debug!("finished process of tunnel connection");
 
     Ok(())
 }
