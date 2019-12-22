@@ -1,5 +1,9 @@
 use bytes::{Buf, BufMut, BytesMut};
-use futures::{prelude::*, try_join};
+use futures::{
+    future::{abortable, AbortHandle},
+    prelude::*,
+    try_join,
+};
 use log::*;
 use std::{
     collections::HashMap,
@@ -7,6 +11,7 @@ use std::{
     error::Error,
     net::{IpAddr, SocketAddr},
     str::FromStr,
+    time::Duration,
 };
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -16,6 +21,7 @@ use tokio::{
         mpsc::{channel, Sender},
         oneshot,
     },
+    time::delay_for,
 };
 use tokio_util::codec::{Decoder, Encoder, Framed};
 use uuid::Uuid;
@@ -53,7 +59,7 @@ impl FromStr for TcpWarpPortMap {
     }
 }
 
-struct TcpWarpConnection {
+pub struct TcpWarpConnection {
     sender: Sender<TcpWarpMessage>,
     connected_sender: Option<oneshot::Sender<Result<(), io::Error>>>,
 }

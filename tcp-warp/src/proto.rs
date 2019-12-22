@@ -192,6 +192,7 @@ pub enum TcpWarpMessage {
         connected_sender: oneshot::Sender<Result<(), io::Error>>,
     },
     Disconnect,
+    Listener(AbortHandle),
     HostConnect {
         connection_id: Uuid,
         host_port: u16,

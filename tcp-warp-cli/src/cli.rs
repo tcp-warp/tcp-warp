@@ -14,7 +14,9 @@ pub struct Cli {
 
 #[derive(StructOpt)]
 pub enum Command {
-    /// Client mode. Runs on machine, to which ports are mapped.
+    /// Client mode.
+    ///
+    /// Runs on machine, to which ports are mapped.
     Client {
         /// Address to bind
         /// Format: IP
@@ -33,8 +35,21 @@ pub enum Command {
         /// Example: --map 8081:18081 --map 8082:18082
         #[structopt(long)]
         map: Vec<TcpWarpPortMap>,
+        /// Retry connection on failure or disconnect
+        #[structopt(long)]
+        retry: bool,
+        /// Retry interval in seconds
+        ///
+        /// Default: 5 secs
+        #[structopt(long)]
+        retry_interval: Option<u64>,
+        /// Keep connections between reconnect attempts
+        #[structopt(long)]
+        keep_connections: bool,
     },
-    /// Server mode. Runs on machine, from which mapped addresses are available.
+    /// Server mode.
+    ///
+    /// Runs on machine, from which mapped addresses are available.
     Server {
         /// Address of target host with mapped ports
         /// Format: IP

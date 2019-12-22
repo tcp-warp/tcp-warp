@@ -39,6 +39,7 @@ features = [
     'rt-core',
     'sync',
     'stream',
+    'time',
 ]
 
 [dependencies.tokio-util]
