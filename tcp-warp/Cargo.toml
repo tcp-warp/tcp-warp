@@ -34,6 +34,7 @@ features = ['v4']
 [dependencies.tokio]
 version = '0.2'
 features = [
+    'dns',
     'io-util',
     'tcp',
     'rt-core',

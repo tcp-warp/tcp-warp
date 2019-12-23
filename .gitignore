@@ -1,5 +1,4 @@
 target/
-/Cargo.lock
 /server.deno.ts
 /server.node.js
 /.*.md

@@ -11,7 +11,7 @@ cargo install tcp-warp-cli
 
 */
 use env_logger::Builder as LoggerBuilder;
-use std::{error::Error, time::Duration};
+use std::{error::Error, sync::Arc, time::Duration};
 use structopt::StructOpt;
 use tcpwarp::{TcpWarpClient, TcpWarpServer};
 
@@ -41,29 +41,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
     match cli.command {
         Client {
             bind,
-            server,
-            map,
+            tunnel,
+            connection,
             retry,
             retry_interval,
             keep_connections,
         } => {
-            eprintln!("{:?}", map);
             let client = TcpWarpClient::new(
                 bind.unwrap_or_else(|| DEFAULT_CLIENT_BIND.into()).parse()?,
-                server
+                tunnel
                     .unwrap_or_else(|| DEFAULT_CLIENT_SERVER.into())
                     .parse()?,
-                map,
             );
             if retry {
                 client
                     .connect_loop(
                         Duration::from_secs(retry_interval.unwrap_or(5)),
                         keep_connections,
+                        Arc::new(connection),
                     )
                     .await?;
             } else {
-                client.connect().await?;
+                client.connect(connection).await?;
             }
         }
         Server {
