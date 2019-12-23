@@ -59,19 +59,23 @@ pub enum Command {
     ///
     /// Runs on machine, from which mapped addresses are available.
     Server {
-        /// Address of target host with mapped ports
+        /// Address of target host with mapped ports. Used if client does not specify host.
+        ///
         /// Format: IP
+        ///
         /// Example: --connect 172.24.0.1
+        ///
         /// Default: 127.0.0.1
         #[structopt(long)]
         connect: Option<String>,
         #[structopt(long)]
         /// Address to listen
+        ///
         /// Format: IP:PORT
+        ///
         /// Example: --server 192.168.0.1:18000
+        ///
         /// Default: 127.0.0.1:18000
         listen: Option<String>,
-        #[structopt(long, short)]
-        port: Vec<u16>,
     },
 }

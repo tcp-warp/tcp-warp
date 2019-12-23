@@ -3,15 +3,13 @@ use super::*;
 pub struct TcpWarpServer {
     listen_address: SocketAddr,
     connect_address: IpAddr,
-    ports: Vec<u16>,
 }
 
 impl TcpWarpServer {
-    pub fn new(listen_address: SocketAddr, connect_address: IpAddr, ports: Vec<u16>) -> Self {
+    pub fn new(listen_address: SocketAddr, connect_address: IpAddr) -> Self {
         Self {
             listen_address,
             connect_address,
-            ports,
         }
     }
 
@@ -21,9 +19,8 @@ impl TcpWarpServer {
         let connect_address = self.connect_address;
 
         while let Some(Ok(stream)) = incoming.next().await {
-            let ports = self.ports.clone();
             spawn(async move {
-                if let Err(e) = process(stream, connect_address, ports).await {
+                if let Err(e) = process(stream, connect_address).await {
                     println!("failed to process connection; error = {}", e);
                 }
             });
@@ -32,14 +29,10 @@ impl TcpWarpServer {
     }
 }
 
-async fn process(
-    stream: TcpStream,
-    connect_address: IpAddr,
-    ports: Vec<u16>,
-) -> Result<(), Box<dyn Error>> {
+async fn process(stream: TcpStream, connect_address: IpAddr) -> Result<(), Box<dyn Error>> {
     let mut transport = Framed::new(stream, TcpWarpProto);
 
-    transport.send(TcpWarpMessage::AddPorts(ports)).await?;
+    transport.send(TcpWarpMessage::AddPorts(vec![])).await?;
 
     let (mut wtransport, mut rtransport) = transport.split();
 
