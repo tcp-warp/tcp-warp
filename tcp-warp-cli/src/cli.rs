@@ -1,5 +1,5 @@
 use structopt::StructOpt;
-use tcpwarp::TcpWarpPortMap;
+use tcpwarp::TcpWarpPortConnection;
 
 /// An utility to create userspace tunnel between two hosts
 /// mapping ports on client machine to hosts and ports
@@ -19,22 +19,30 @@ pub enum Command {
     /// Runs on machine, to which ports are mapped.
     Client {
         /// Address to bind
+        ///
         /// Format: IP
+        ///
         /// Example: --bind 127.0.0.1
+        ///
         /// Default: 0.0.0.0
         #[structopt(long)]
         bind: Option<String>,
-        #[structopt(long)]
+        #[structopt(long, short)]
         /// Server to connect
+        ///
         /// Format: IP:PORT
-        /// Example: --server 192.168.0.1:18000
+        ///
+        /// Example: --tunnel 192.168.0.1:18000
+        ///
         /// Default: 127.0.0.1:18000
-        server: Option<String>,
-        /// Port map
-        /// Format: host_port:client_port
-        /// Example: --map 8081:18081 --map 8082:18082
-        #[structopt(long)]
-        map: Vec<TcpWarpPortMap>,
+        tunnel: Option<String>,
+        /// Connections
+        ///
+        /// Format: [client_port:][host:]host_port
+        ///
+        /// Example: --connection 8080 --connection 18081:8081 --connection 18082:127.0.0.1:8082
+        #[structopt(long, short)]
+        connection: Vec<TcpWarpPortConnection>,
         /// Retry connection on failure or disconnect
         #[structopt(long)]
         retry: bool,
@@ -51,19 +59,23 @@ pub enum Command {
     ///
     /// Runs on machine, from which mapped addresses are available.
     Server {
-        /// Address of target host with mapped ports
+        /// Address of target host with mapped ports. Used if client does not specify host.
+        ///
         /// Format: IP
+        ///
         /// Example: --connect 172.24.0.1
+        ///
         /// Default: 127.0.0.1
         #[structopt(long)]
         connect: Option<String>,
         #[structopt(long)]
         /// Address to listen
+        ///
         /// Format: IP:PORT
+        ///
         /// Example: --server 192.168.0.1:18000
+        ///
         /// Default: 127.0.0.1:18000
         listen: Option<String>,
-        #[structopt(long, short)]
-        port: Vec<u16>,
     },
 }

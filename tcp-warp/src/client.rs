@@ -2,38 +2,41 @@ use super::*;
 
 pub struct TcpWarpClient {
     bind_address: IpAddr,
-    server_address: SocketAddr,
-    map: Vec<TcpWarpPortMap>,
+    tunnel_address: SocketAddr,
 }
 
 pub type TcpWarpClientResult = HashMap<Uuid, TcpWarpConnection>;
 
 impl TcpWarpClient {
-    pub fn new(bind_address: IpAddr, server_address: SocketAddr, map: Vec<TcpWarpPortMap>) -> Self {
+    pub fn new(bind_address: IpAddr, tunnel_address: SocketAddr) -> Self {
         Self {
             bind_address,
-            server_address,
-            map,
+            tunnel_address,
         }
     }
 
-    pub async fn connect(&self) -> Result<TcpWarpClientResult, Box<dyn Error>> {
-        self.connect_with(HashMap::new()).await
+    pub async fn connect(
+        &self,
+        addresses: Vec<TcpWarpPortConnection>,
+    ) -> Result<(TcpWarpClientResult, Arc<Vec<TcpWarpPortConnection>>), Box<dyn Error>> {
+        self.connect_with(HashMap::new(), Arc::new(addresses)).await
     }
 
     pub async fn connect_loop(
         &self,
         retry_delay: Duration,
         keep_connections: bool,
+        mut addresses: Arc<Vec<TcpWarpPortConnection>>,
     ) -> Result<(), Box<dyn Error>> {
         let mut connections = HashMap::new();
 
-        while let Ok(data) = self.connect_with(connections).await {
+        while let Ok((data, addrs)) = self.connect_with(connections, addresses).await {
             connections = if keep_connections {
                 data
             } else {
                 HashMap::new()
             };
+            addresses = addrs;
             warn!("retrying in {:?}", retry_delay);
             delay_for(retry_delay).await;
         }
@@ -44,12 +47,13 @@ impl TcpWarpClient {
     async fn connect_with(
         &self,
         mut connections: TcpWarpClientResult,
-    ) -> Result<TcpWarpClientResult, Box<dyn Error>> {
-        let stream = match TcpStream::connect(&self.server_address).await {
+        addresses: Arc<Vec<TcpWarpPortConnection>>,
+    ) -> Result<(TcpWarpClientResult, Arc<Vec<TcpWarpPortConnection>>), Box<dyn Error>> {
+        let stream = match TcpStream::connect(&self.tunnel_address).await {
             Ok(stream) => stream,
             Err(err) => {
                 error!("cannot connect to tunnel: {}", err);
-                return Ok(connections);
+                return Ok((connections, addresses));
             }
         };
         let (mut wtransport, mut rtransport) = Framed::new(stream, TcpWarpProto).split();
@@ -66,8 +70,8 @@ impl TcpWarpClient {
                 let message = match message {
                     TcpWarpMessage::Connect {
                         connection_id,
+                        connection,
                         sender,
-                        host_port,
                         connected_sender,
                     } => {
                         debug!("adding connection: {}", connection_id);
@@ -80,7 +84,8 @@ impl TcpWarpClient {
                         );
                         TcpWarpMessage::HostConnect {
                             connection_id,
-                            host_port,
+                            host: connection.host,
+                            port: connection.port,
                         }
                     }
                     TcpWarpMessage::Listener(abort_handler) => {
@@ -154,13 +159,18 @@ impl TcpWarpClient {
             Ok::<TcpWarpClientResult, io::Error>(connections)
         };
 
-        let mapping = self.map.clone();
         let bind_address = self.bind_address;
 
+        let _addresses = addresses.clone();
         let processing_task = async move {
             while let Some(Ok(message)) = rtransport.next().await {
-                process_host_to_client_message(message, sender.clone(), &mapping, bind_address)
-                    .await?;
+                process_host_to_client_message(
+                    message,
+                    sender.clone(),
+                    addresses.clone(),
+                    bind_address,
+                )
+                .await?;
             }
 
             debug!("processing task for host to client finished");
@@ -174,24 +184,24 @@ impl TcpWarpClient {
 
         let (connections, _) = try_join!(forward_task, processing_task)?;
 
-        Ok(connections)
+        Ok((connections, _addresses))
     }
 }
 
+// async fn publish
 async fn process_host_to_client_message(
     message: TcpWarpMessage,
     mut sender: Sender<TcpWarpMessage>,
-    mapping: &[TcpWarpPortMap],
+    addresses: Arc<Vec<TcpWarpPortConnection>>,
     bind_address: IpAddr,
 ) -> Result<(), io::Error> {
     debug!("{} host to client: {:?}", bind_address, message);
 
     match message {
-        TcpWarpMessage::AddPorts(host_ports) => {
-            for host_port in host_ports {
-                let port = client_port(mapping, host_port).unwrap_or(host_port);
-
-                let bind_address = SocketAddr::new(bind_address, port);
+        TcpWarpMessage::AddPorts(_) => {
+            for address in addresses.iter().cloned() {
+                let bind_address =
+                    SocketAddr::new(bind_address, address.client_port.unwrap_or(address.port));
                 let sender_ = sender.clone();
 
                 let mut listener = match TcpListener::bind(bind_address).await {
@@ -201,6 +211,7 @@ async fn process_host_to_client_message(
                         return Err(err);
                     }
                 };
+
                 debug!("listen: {:?}", bind_address);
 
                 let abortable_feature = async move {
@@ -209,8 +220,9 @@ async fn process_host_to_client_message(
                     while let Some(Ok(stream)) = incoming.next().await {
                         let sender__ = sender_.clone();
 
+                        let _address = address.clone();
                         spawn(async move {
-                            if let Err(e) = process(stream, sender__, host_port).await {
+                            if let Err(e) = process(stream, sender__, _address).await {
                                 error!("failed to process connection; error = {}", e);
                             }
                         });
@@ -250,17 +262,10 @@ async fn process_host_to_client_message(
     Ok(())
 }
 
-fn client_port(mapping: &[TcpWarpPortMap], host_port: u16) -> Option<u16> {
-    mapping
-        .iter()
-        .find(|x| x.host_port == host_port)
-        .map(|x| x.client_port)
-}
-
 async fn process(
     stream: TcpStream,
     mut host_sender: Sender<TcpWarpMessage>,
-    host_port: u16,
+    address: TcpWarpPortConnection,
 ) -> Result<(), Box<dyn Error>> {
     let connection_id = Uuid::new_v4();
 
@@ -302,7 +307,7 @@ async fn process(
     host_sender
         .send(TcpWarpMessage::Connect {
             connection_id,
-            host_port,
+            connection: address,
             sender: client_sender,
             connected_sender,
         })

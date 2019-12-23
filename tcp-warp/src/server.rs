@@ -3,15 +3,13 @@ use super::*;
 pub struct TcpWarpServer {
     listen_address: SocketAddr,
     connect_address: IpAddr,
-    ports: Vec<u16>,
 }
 
 impl TcpWarpServer {
-    pub fn new(listen_address: SocketAddr, connect_address: IpAddr, ports: Vec<u16>) -> Self {
+    pub fn new(listen_address: SocketAddr, connect_address: IpAddr) -> Self {
         Self {
             listen_address,
             connect_address,
-            ports,
         }
     }
 
@@ -21,9 +19,8 @@ impl TcpWarpServer {
         let connect_address = self.connect_address;
 
         while let Some(Ok(stream)) = incoming.next().await {
-            let ports = self.ports.clone();
             spawn(async move {
-                if let Err(e) = process(stream, connect_address, ports).await {
+                if let Err(e) = process(stream, connect_address).await {
                     println!("failed to process connection; error = {}", e);
                 }
             });
@@ -32,14 +29,10 @@ impl TcpWarpServer {
     }
 }
 
-async fn process(
-    stream: TcpStream,
-    connect_address: IpAddr,
-    ports: Vec<u16>,
-) -> Result<(), Box<dyn Error>> {
+async fn process(stream: TcpStream, connect_address: IpAddr) -> Result<(), Box<dyn Error>> {
     let mut transport = Framed::new(stream, TcpWarpProto);
 
-    transport.send(TcpWarpMessage::AddPorts(ports)).await?;
+    transport.send(TcpWarpMessage::AddPorts(vec![])).await?;
 
     let (mut wtransport, mut rtransport) = transport.split();
 
@@ -52,11 +45,10 @@ async fn process(
         while let Some(message) = receiver.next().await {
             debug!("received in fw message: {:?}", message);
             let message = match message {
-                TcpWarpMessage::Connect {
+                TcpWarpMessage::ConnectForward {
                     connection_id,
                     sender,
                     connected_sender,
-                    host_port: _,
                 } => {
                     debug!("adding connection: {}", connection_id);
                     if let Err(err) = connected_sender.send(Ok(())) {
@@ -140,18 +132,20 @@ async fn process_client_to_host_message(
     match message {
         TcpWarpMessage::HostConnect {
             connection_id,
-            host_port,
+            host,
+            port,
         } => {
-            let connect_address = SocketAddr::new(connect_address, host_port);
             let client_sender_ = client_sender.clone();
             spawn(async move {
-                if let Err(err) = process_host_connection(
-                    connect_address,
-                    client_sender_,
-                    connection_id,
-                    host_port,
-                )
-                .await
+                let connect_address = connect_address.to_string();
+                let socket_address = format!(
+                    "{}:{}",
+                    host.unwrap_or_else(|| connect_address.to_string()),
+                    port
+                );
+                debug!("host connection to {}", socket_address);
+                if let Err(err) =
+                    process_host_connection(client_sender_, connection_id, socket_address).await
                 {
                     error!(
                         "failed connection {} {}: {}",
@@ -181,14 +175,13 @@ async fn process_client_to_host_message(
     Ok(())
 }
 
-async fn process_host_connection(
-    connect_address: SocketAddr,
+async fn process_host_connection<S: ToSocketAddrs>(
     mut client_sender: Sender<TcpWarpMessage>,
     connection_id: Uuid,
-    host_port: u16,
+    socket_address: S,
 ) -> Result<(), Box<dyn Error>> {
     debug!("{} new connection", connection_id);
-    let stream = TcpStream::connect(connect_address).await?;
+    let stream = TcpStream::connect(socket_address).await?;
 
     let (mut wtransport, mut rtransport) =
         Framed::new(stream, TcpWarpProtoHost { connection_id }).split();
@@ -221,9 +214,8 @@ async fn process_host_connection(
     let (connected_sender, connected_receiver) = oneshot::channel();
 
     client_sender
-        .send(TcpWarpMessage::Connect {
+        .send(TcpWarpMessage::ConnectForward {
             connection_id,
-            host_port,
             sender: host_sender,
             connected_sender,
         })
