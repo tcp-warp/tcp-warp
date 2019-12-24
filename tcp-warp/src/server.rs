@@ -181,7 +181,16 @@ async fn process_host_connection<S: ToSocketAddrs>(
     socket_address: S,
 ) -> Result<(), Box<dyn Error>> {
     debug!("{} new connection", connection_id);
-    let stream = TcpStream::connect(socket_address).await?;
+
+    let stream = match TcpStream::connect(socket_address).await {
+        Ok(stream) => stream,
+        Err(err) => {
+            client_sender
+                .send(TcpWarpMessage::ConnectFailure { connection_id })
+                .await?;
+            return Err(err.into());
+        }
+    };
 
     let (mut wtransport, mut rtransport) =
         Framed::new(stream, TcpWarpProtoHost { connection_id }).split();
