@@ -4,25 +4,46 @@ name = 'tcp-warp'
 
 [package]
 name = 'tcp-warp-cli'
-version = '0.1.0'
+version = '0.2.0'
 authors = ['Alexander Korolev <kilork@yandex.ru>']
 edition = '2018'
-categories = []
+categories = [
+    'command-line-utilities',
+    'network-programming',
+]
 description = '''
-tcp-warp-cli description.
+A userspace tunnel between two hosts mapping ports on client
+machine to addresses reachable from server machine
 '''
 homepage = 'https://github.com/tcp-warp/tcp-warp'
-keywords = []
+keywords = [
+    'tcp',
+    'tunnel',
+    'protocol',
+    'proxy',
+    'cli',
+]
 license = 'Unlicense OR MIT'
 readme = 'README.md'
 repository = 'https://github.com/tcp-warp/tcp-warp'
+[badges.appveyor]
+repository = 'https://github.com/tcp-warp/tcp-warp'
+branch = 'master'
+service = 'github'
+
+[badges.travis-ci]
+repository = 'https://github.com/tcp-warp/tcp-warp'
+branch = 'master'
+
+[badges.maintenance]
+status = 'actively-developed'
 
 [dependencies]
 log = '0.4'
 env_logger = '0.7'
 clap-verbosity-flag = '0.3.0'
 structopt = '0.3'
-tcp-warp = '0.1'
+tcp-warp = '0.2'
 
 [dependencies.tokio]
 version = '0.2'
