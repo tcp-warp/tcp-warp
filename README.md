@@ -20,7 +20,9 @@ Dual-licensed under `MIT` or the [UNLICENSE](http://unlicense.org/).
 
 With [cargo](https://www.rust-lang.org/learn/get-started):
 
-    cargo install tcp-warp-cli
+```bash
+cargo install tcp-warp-cli
+```
 
 ## Usage
 

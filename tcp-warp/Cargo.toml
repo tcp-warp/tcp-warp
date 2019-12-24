@@ -3,7 +3,7 @@ name = 'tcpwarp'
 
 [package]
 name = 'tcp-warp'
-version = '0.1.0'
+version = '0.2.0'
 authors = ['Alexander Korolev <kilork@yandex.ru>']
 edition = '2018'
 description = '''

@@ -4,7 +4,7 @@ name = 'tcp-warp'
 
 [package]
 name = 'tcp-warp-cli'
-version = '0.1.0'
+version = '0.2.0'
 authors = ['Alexander Korolev <kilork@yandex.ru>']
 edition = '2018'
 categories = [
@@ -43,7 +43,7 @@ log = '0.4'
 env_logger = '0.7'
 clap-verbosity-flag = '0.3.0'
 structopt = '0.3'
-tcp-warp = '0.1'
+tcp-warp = '0.2'
 
 [dependencies.tokio]
 version = '0.2'

@@ -17,7 +17,9 @@ nc 127.0.0.1 8080
 
 With [cargo](https://www.rust-lang.org/learn/get-started):
 
-    cargo install tcp-warp-cli
+```bash
+cargo install tcp-warp-cli
+```
 
 ## Usage
 
