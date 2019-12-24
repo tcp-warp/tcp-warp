@@ -145,8 +145,7 @@ async fn process_client_to_host_message(
                 );
                 debug!("host connection to {}", socket_address);
                 if let Err(err) =
-                    process_host_connection(client_sender_.clone(), connection_id, socket_address)
-                        .await
+                    process_host_connection(client_sender_, connection_id, socket_address).await
                 {
                     error!(
                         "failed connection {} {}: {}",
