@@ -7,20 +7,31 @@ version = '0.1.0'
 authors = ['Alexander Korolev <kilork@yandex.ru>']
 edition = '2018'
 description = '''
-An userspace tunnel between two hosts
-mapping ports on client machine to hosts and ports
-accessible from server machine using single port.
+A userspace tunnel between two hosts mapping ports on client
+machine to addresses reachable from server machine.
 '''
 homepage = 'https://github.com/tcp-warp/tcp-warp'
-keywords = []
+keywords = [
+    'tcp',
+    'tunnel',
+    'protocol',
+    'proxy',
+]
 license = 'Unlicense OR MIT'
 readme = 'README.md'
 repository = 'https://github.com/tcp-warp/tcp-warp'
+categories = ['network-programming']
+[badges.appveyor]
+repository = 'https://github.com/tcp-warp/tcp-warp'
+branch = 'master'
+service = 'github'
 
-[badges]
-appveyor = { repository = "https://github.com/tcp-warp/tcp-warp", branch = "master", service = "github" }
-travis-ci = { repository = "https://github.com/tcp-warp/tcp-warp", branch = "master" }
-maintenance = { status = "actively-developed" }
+[badges.travis-ci]
+repository = 'https://github.com/tcp-warp/tcp-warp'
+branch = 'master'
+
+[badges.maintenance]
+status = 'actively-developed'
 
 [dependencies]
 bytes = '0.5'
