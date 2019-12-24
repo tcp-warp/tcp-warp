@@ -145,7 +145,8 @@ async fn process_client_to_host_message(
                 );
                 debug!("host connection to {}", socket_address);
                 if let Err(err) =
-                    process_host_connection(client_sender_, connection_id, socket_address).await
+                    process_host_connection(client_sender_.clone(), connection_id, socket_address)
+                        .await
                 {
                     error!(
                         "failed connection {} {}: {}",
@@ -181,7 +182,16 @@ async fn process_host_connection<S: ToSocketAddrs>(
     socket_address: S,
 ) -> Result<(), Box<dyn Error>> {
     debug!("{} new connection", connection_id);
-    let stream = TcpStream::connect(socket_address).await?;
+
+    let stream = match TcpStream::connect(socket_address).await {
+        Ok(stream) => stream,
+        Err(err) => {
+            client_sender
+                .send(TcpWarpMessage::ConnectFailure { connection_id })
+                .await?;
+            return Err(err.into());
+        }
+    };
 
     let (mut wtransport, mut rtransport) =
         Framed::new(stream, TcpWarpProtoHost { connection_id }).split();

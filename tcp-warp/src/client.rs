@@ -111,6 +111,25 @@ impl TcpWarpClient {
                         debug!("connections in pool: {}", connections.len());
                         continue;
                     }
+                    TcpWarpMessage::ConnectFailure { ref connection_id } => {
+                        if let Some(mut connection) = connections.remove(connection_id) {
+                            if let Some(connection_sender) = connection.connected_sender.take() {
+                                if let Err(err) = connection_sender.send(Err(io::Error::new(
+                                    io::ErrorKind::Other,
+                                    "disonnect propagated",
+                                ))) {
+                                    error!("cannot send to oneshot channel: {:?}", err);
+                                }
+                            }
+                            if let Err(err) = connection.sender.send(message).await {
+                                error!("cannot send to channel: {}", err);
+                            }
+                        } else {
+                            error!("connection not found: {}", connection_id);
+                        }
+                        debug!("connections in pool: {}", connections.len());
+                        continue;
+                    }
                     TcpWarpMessage::Connected { ref connection_id } => {
                         if let Some(connection) = connections.get_mut(&connection_id) {
                             debug!("start connected loop: {}", connection_id);
@@ -257,6 +276,14 @@ async fn process_host_to_client_message(
                 );
             }
         }
+        TcpWarpMessage::ConnectFailure { .. } => {
+            if let Err(err) = sender.send(message).await {
+                error!(
+                    "cannot send message ConnectFailure to forward channel: {}",
+                    err
+                );
+            }
+        }
         other_message => warn!("unsupported message: {:?}", other_message),
     }
     Ok(())
@@ -284,6 +311,7 @@ async fn process(
                 connection_id, message
             );
             match message {
+                TcpWarpMessage::ConnectFailure { .. } => break,
                 TcpWarpMessage::DisconnectHost { .. } => break,
                 TcpWarpMessage::BytesServer { data } => wtransport.send(data).await?,
                 _ => (),
@@ -314,8 +342,16 @@ async fn process(
         .await?;
 
     let processing_task = async move {
-        if let Err(err) = connected_receiver.await {
-            error!("{} connection error: {}", connection_id, err);
+        match connected_receiver.await {
+            Err(err) => {
+                error!("{} connection error: {}", connection_id, err);
+                return Ok(());
+            }
+            Ok(Err(err)) => {
+                error!("{} connection error: {}", connection_id, err);
+                return Ok(());
+            }
+            _ => (),
         }
 
         while let Some(Ok(message)) = rtransport.next().await {

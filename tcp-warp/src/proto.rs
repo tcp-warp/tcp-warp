@@ -67,6 +67,11 @@ impl Encoder for TcpWarpProto {
                 dst.put_u8(7);
                 dst.put_u128(connection_id.as_u128());
             }
+            TcpWarpMessage::ConnectFailure { connection_id } => {
+                dst.reserve(1 + 16);
+                dst.put_u8(8);
+                dst.put_u128(connection_id.as_u128());
+            }
             other => {
                 error!("unknown message: {:?}", other);
             }
@@ -151,23 +156,29 @@ impl Decoder for TcpWarpProto {
                     None
                 }
             }
-            Some(5) if src.len() > (16) => {
+            Some(5) if src.len() > 16 => {
                 src.advance(1);
                 let header = src.split_to(16);
                 let connection_id = Uuid::from_slice(&header).unwrap();
                 Some(TcpWarpMessage::Connected { connection_id })
             }
-            Some(6) if src.len() > (16) => {
+            Some(6) if src.len() > 16 => {
                 src.advance(1);
                 let header = src.split_to(16);
                 let connection_id = Uuid::from_slice(&header).unwrap();
                 Some(TcpWarpMessage::DisconnectHost { connection_id })
             }
-            Some(7) if src.len() > (16) => {
+            Some(7) if src.len() > 16 => {
                 src.advance(1);
                 let header = src.split_to(16);
                 let connection_id = Uuid::from_slice(&header).unwrap();
                 Some(TcpWarpMessage::DisconnectClient { connection_id })
+            }
+            Some(8) if src.len() > 16 => {
+                src.advance(1);
+                let header = src.split_to(16);
+                let connection_id = Uuid::from_slice(&header).unwrap();
+                Some(TcpWarpMessage::ConnectFailure { connection_id })
             }
             _ => {
                 debug!("looks like data is wrong [{}] {:?}", src.len(), src);
@@ -214,6 +225,9 @@ pub enum TcpWarpMessage {
         connection_id: Uuid,
         sender: Sender<TcpWarpMessage>,
         connected_sender: oneshot::Sender<Result<(), io::Error>>,
+    },
+    ConnectFailure {
+        connection_id: Uuid,
     },
     Disconnect,
     Listener(AbortHandle),
