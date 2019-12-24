@@ -75,7 +75,7 @@ pub enum Command {
         ///
         /// Example: --server 192.168.0.1:18000
         ///
-        /// Default: 127.0.0.1:18000
+        /// Default: 0.0.0.0:18000
         listen: Option<String>,
     },
 }

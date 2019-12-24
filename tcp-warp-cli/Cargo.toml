@@ -13,7 +13,7 @@ categories = [
 ]
 description = '''
 A userspace tunnel between two hosts mapping ports on client
-machine to addresses reachable from server machine.
+machine to addresses reachable from server machine
 '''
 homepage = 'https://github.com/tcp-warp/tcp-warp'
 keywords = [
