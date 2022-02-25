@@ -45,13 +45,13 @@ docker run --rm -d -p 18234:18234 tcpwarp/tcpwarp tcp-warp server --listen=0.0.0
 1. Start server:
 
     ```bash
-    tcp-warp server
+    tcp-warp server --listen 0.0.0.0:18000
     ```
 
 1. Start client:
 
     ```bash
-    tcp-warp client -c 8080:towel.blinkenlights.nl:23
+    tcp-warp client -c 8080:towel.blinkenlights.nl:23 --tunnel 127.0.0.1:18000
     ```
 
 1. Enjoy the show:
